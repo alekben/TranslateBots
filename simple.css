@@ -1,0 +1,27 @@
+#cameraSelect {
+    padding: 8px 12px;
+    border-radius: 20px;
+    border: 1px solid #ccc;
+    background-color: white;
+    font-family: Jokker, Arial, sans-serif;
+    margin-left: 10px;
+    cursor: pointer;
+    transition: all 0.3s ease-in-out;
+}
+
+#cameraSelect:disabled {
+    background-color: #f5f5f5;
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
+#cameraSelect:not(:disabled):hover {
+    border-color: #00c2ff;
+    box-shadow: 2px 2px 4px rgba(0, 194, 255, 0.3);
+}
+
+#cameraSelect:not(:disabled):focus {
+    outline: none;
+    border-color: #00c2ff;
+    box-shadow: 2px 2px 4px rgba(0, 194, 255, 0.3);
+} 
