@@ -25,6 +25,104 @@ const userState = {
 let channel = null; // Will be set when joining
 let uid = 0; // User ID
 
+// Track users in the channel, their UID, mic/cam states, join order, and metadata
+let usersInChannel = [];
+
+// --- Share Link Modal Logic ---
+let isShareModalOpen = false;
+
+function getShareLink() {
+    const url = new URL(window.location.href);
+    url.searchParams.set('appid', document.getElementById('appId').value);
+    url.searchParams.set('channel', document.getElementById('channel').value);
+    return url.toString();
+}
+
+function showShareLinkModal() {
+    const modal = document.getElementById('shareLinkModal');
+    const shareUrl = getShareLink();
+    modal.innerHTML = `
+        <div style="display: flex; align-items: flex-start;">
+            <div style="width: 0; height: 0; border-top: 24px solid transparent; border-bottom: 24px solid transparent; border-right: 32px solid white; margin-top: 18px; margin-left: -16px;"></div>
+            <div style="background: white; color: black; border-radius: 6px; box-shadow: 0 2px 12px rgba(0,0,0,0.12); padding: 18px 24px; min-width: 340px; font-size: 1.1em; font-family: inherit; border: 2px solid #00C2FF;">
+                <div style="font-weight: bold; color: #222; margin-bottom: 6px;">Click and share this link with others!</div>
+                <div id="shareLinkUrl" style="margin-bottom: 8px; word-break: break-all; background: #f7f7f7; border-radius: 4px; padding: 6px 8px; font-family: monospace; font-size: 0.98em; color: #0077cc; cursor: pointer; transition: background 0.2s, color 0.2s, opacity 1s; user-select: all;">${shareUrl}</div>
+                <div style="color: #222;">Click the Agora icon to close this message or show the link again anytime!</div>
+            </div>
+        </div>
+    `;
+    modal.style.display = 'block';
+    modal.style.background = '#00C2FF';
+    isShareModalOpen = true;
+
+    // Add clipboard and animation logic
+    const urlElem = document.getElementById('shareLinkUrl');
+    if (urlElem) {
+        urlElem.onclick = async function() {
+            try {
+                await navigator.clipboard.writeText(shareUrl);
+            } catch (e) {
+                // fallback for older browsers
+                const range = document.createRange();
+                range.selectNode(urlElem);
+                window.getSelection().removeAllRanges();
+                window.getSelection().addRange(range);
+                document.execCommand('copy');
+                window.getSelection().removeAllRanges();
+            }
+            urlElem.style.background = '#0077cc';
+            urlElem.style.color = 'white';
+            urlElem.style.opacity = '0.7';
+            setTimeout(() => {
+                urlElem.style.transition = 'background 0.6s, color 0.6s, opacity 1s';
+                urlElem.style.background = '#f7f7f7';
+                urlElem.style.color = 'white';
+                urlElem.style.opacity = '1';
+            }, 50);
+        };
+    }
+}
+
+function hideShareLinkModal() {
+    const modal = document.getElementById('shareLinkModal');
+    modal.style.display = 'none';
+    isShareModalOpen = false;
+}
+
+function toggleShareLinkModal() {
+    if (!isJoined) return;
+    if (isShareModalOpen) {
+        hideShareLinkModal();
+    } else {
+        showShareLinkModal();
+    }
+}
+
+// Attach event to agora icon
+window.addEventListener('DOMContentLoaded', function() {
+    const agoraIcon = document.getElementById('agoraIcon');
+    if (agoraIcon) {
+        agoraIcon.addEventListener('click', function() {
+            toggleShareLinkModal();
+        });
+    }
+});
+
+// Show modal after joining, hide after leaving
+const originalJoinChannel = joinChannel;
+joinChannel = async function() {
+    await originalJoinChannel.apply(this, arguments);
+    isJoined = true;
+    showShareLinkModal();
+};
+
+const originalLeaveChannel = leaveChannel;
+leaveChannel = async function() {
+    await originalLeaveChannel.apply(this, arguments);
+    isJoined = false;
+    hideShareLinkModal();
+};
+
 // Generate random alphanumeric string of specified length
 function generateRandomChannel(length) {
     const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -36,6 +134,15 @@ function generateRandomChannel(length) {
     return result;
 }
 
+function generateRandomUID(length) {
+    const characters = '0123456789';
+    let result = '';
+    for (let i = 0; i < length; i++) {
+        result += characters.charAt(Math.floor(Math.random() * characters.length));
+    }
+    return result;
+}
+
 // Initialize the AgoraRTC client
 function initializeClient() {
     client = AgoraRTC.createClient({ mode: "rtc", codec: "vp9" });
@@ -44,37 +151,65 @@ function initializeClient() {
 
 // Handle client events
 function setupEventListeners() {
-
-    //create remote container with UID as label on remote user join
     client.on("user-joined", async (user) => {
-        console.log(`user ${user} joined channel`);
-        displayRemoteUser(user)
+        console.log(`user ${user.uid} joined channel`);
+        log(`user ${user.uid} joined channel`);
+        // Add remote user to usersInChannel
+        usersInChannel.push({
+            uid: user.uid,
+            mic: 'muted',
+            cam: 'muted',
+            metadata: ''
+        });
+        displayRemoteUser(user);
+        logUsersInChannel();
     });
 
-    //remove remote user container on remote user left
     client.on("user-left", (user) => {
-        console.log(`user ${user} left channel`);
+        console.log(`user ${user.uid} left channel`);
+        log(`user ${user.uid} left channel`);
+        // Remove user from usersInChannel
+        const idx = usersInChannel.findIndex(u => u.uid === user.uid);
+        if (idx !== -1) usersInChannel.splice(idx, 1);
         const remotePlayerContainer = document.getElementById(user.uid);
         remotePlayerContainer && remotePlayerContainer.remove();
+        logUsersInChannel();
+        // Update local video position after remote user leaves
+        updateLocalVideoPosition();
     });
 
-    //subscribe to remote user media and play remote video/audio
     client.on("user-published", async (user, mediaType) => {
+        log(`subscribing to user ${user.uid} ${mediaType}`);
         await client.subscribe(user, mediaType);
         console.log("subscribe success");
-
+        // Update user state in usersInChannel
+        const idx = usersInChannel.findIndex(u => u.uid === user.uid);
+        if (idx !== -1) {
+            if (mediaType === 'video') usersInChannel[idx].cam = 'unmuted';
+            if (mediaType === 'audio') usersInChannel[idx].mic = 'unmuted';
+            logUsersInChannel();
+        }
         if (mediaType === "video") {
             playRemoteVideo(user);
         }
-
         if (mediaType === "audio") {
             user.audioTrack.play();
         }
+        updateRemotePlayerContainer(user.uid);
     });
 
-    client.on("user-unpublished", (use, mediaType) => {
-        const remotePlayerContainer = document.getElementById(user.uid);
-        remotePlayerContainer && remotePlayerContainer.remove();
+    client.on("user-unpublished", (user, mediaType) => {
+        log(`unsubscribing from user ${user.uid} ${mediaType}`);
+        // Update user state in usersInChannel
+        const idx = usersInChannel.findIndex(u => u.uid === user.uid);
+        if (idx !== -1) {
+            if (mediaType === 'video') usersInChannel[idx].cam = 'muted';
+            if (mediaType === 'audio') usersInChannel[idx].mic = 'muted';
+            logUsersInChannel();
+        }
+        // let's update the remotePlayerContainer here, based on the state of usersInChannel values
+        // This is only firing because either .cam or .mic is now 'muted' so we should show an icon at least
+        updateRemotePlayerContainer(user.uid);
     });
 
     client.on("connection-state-change", (cur, prev, reason) => {
@@ -95,8 +230,10 @@ function setupEventListeners() {
 }
 
 function log(message) {
-    document.getElementById("log").appendChild(document.createElement('div')).append(message)
-};
+    const logDiv = document.getElementById("log");
+    logDiv.appendChild(document.createElement('div')).append(message);
+    logDiv.scrollTop = logDiv.scrollHeight; // Auto-scroll to bottom
+}
 
 // Update microphone and camera button states based on track availability and user state
 function updateButtonStates() {
@@ -202,6 +339,8 @@ async function toggleMicrophoneCapture() {
         await localAudioTrack.setEnabled(userState.isMicCapturing);
         updateButtonStates();
         updateLocalVideoCameraIcon();
+        // Update usersInChannel state
+        updateUserState(uid, userState.isMicCapturing ? 'unmuted' : 'muted', userState.isCameraCapturing ? 'unmuted' : 'muted');
     } catch (error) {
         console.error('Error toggling microphone capture:', error);
         log('Error toggling microphone capture: ' + error.message);
@@ -217,6 +356,8 @@ async function toggleMicrophoneMute() {
         await localAudioTrack.setMuted(userState.isMicMuted);
         updateButtonStates();
         updateLocalVideoCameraIcon();
+        // Update usersInChannel state
+        updateUserState(uid, userState.isMicMuted ? 'muted' : 'unmuted', userState.isCameraCapturing ? 'unmuted' : 'muted');
     } catch (error) {
         console.error('Error toggling microphone mute:', error);
         log('Error toggling microphone mute: ' + error.message);
@@ -232,6 +373,8 @@ async function toggleCameraCapture() {
         await localVideoTrack.setEnabled(userState.isCameraCapturing);
         updateButtonStates();
         updateLocalVideoCameraIcon();
+        // Update usersInChannel state
+        updateUserState(uid, userState.isMicCapturing ? 'unmuted' : 'muted', userState.isCameraCapturing ? 'unmuted' : 'muted');
     } catch (error) {
         console.error('Error toggling camera capture:', error);
         log('Error toggling camera capture: ' + error.message);
@@ -247,6 +390,8 @@ async function toggleCameraMute() {
         await localVideoTrack.setMuted(userState.isCameraMuted);
         updateButtonStates();
         updateLocalVideoCameraIcon();
+        // Update usersInChannel state
+        updateUserState(uid, userState.isMicCapturing ? 'unmuted' : 'muted', userState.isCameraMuted ? 'muted' : 'unmuted');
     } catch (error) {
         console.error('Error toggling camera mute:', error);
         log('Error toggling camera mute: ' + error.message);
@@ -255,6 +400,7 @@ async function toggleCameraMute() {
 
 // Create local audio and video tracks
 async function createLocalTracks() {
+    log("createLocalTracks");
     try {
         localAudioTrack = await AgoraRTC.createMicrophoneAudioTrack();
         localVideoTrack = await AgoraRTC.createCameraVideoTrack({encoderConfig: "720p_3"});
@@ -279,6 +425,7 @@ async function createLocalTracks() {
 
 // Publish local audio and video tracks
 async function publishLocalTracks() {
+    log("publishLocalTracks");
     await client.publish([localAudioTrack, localVideoTrack]);
 }
 
@@ -286,9 +433,14 @@ async function publishLocalTracks() {
 function displayLocalVideo() {
     const localPlayerContainer = document.createElement("div");
     localPlayerContainer.id = uid;
-    localPlayerContainer.style.width = "1280px";
-    localPlayerContainer.style.height = "720px";
-    localPlayerContainer.style.position = "relative";
+    localPlayerContainer.style.width = "100%";
+    localPlayerContainer.style.height = "100%";
+    localPlayerContainer.style.position = "absolute";
+    localPlayerContainer.style.top = "0";
+    localPlayerContainer.style.left = "0";
+    localPlayerContainer.style.transition = "all 0.3s ease-in-out";
+    localPlayerContainer.style.transformOrigin = "bottom right";
+    localPlayerContainer.style.zIndex = "2";
 
     // Create device icon container
     const deviceIconContainer = document.createElement("div");
@@ -302,7 +454,21 @@ function displayLocalVideo() {
     deviceIconContainer.style.justifyContent = "center";
     deviceIconContainer.style.alignItems = "center";
 
-    // Add camera icon SVG
+    // Add camera icon with background
+    const cameraIconContainer = document.createElement("div");
+    cameraIconContainer.style.position = "relative";
+    cameraIconContainer.style.display = "none"; // Initially hidden
+    const cameraBackground = document.createElement("div");
+    cameraBackground.style.position = "absolute";
+    cameraBackground.style.width = "72px";
+    cameraBackground.style.height = "72px";
+    cameraBackground.style.borderRadius = "50%";
+    cameraBackground.style.backgroundColor = "black";
+    cameraBackground.style.opacity = "0.5";
+    cameraBackground.style.top = "50%";
+    cameraBackground.style.left = "50%";
+    cameraBackground.style.transform = "translate(-50%, -50%)";
+    cameraBackground.style.zIndex = "1";
     const cameraIcon = document.createElement("div");
     cameraIcon.innerHTML = `
         <svg viewBox="0 0 24 24" fill="none" stroke="grey" stroke-width="2" width="32" height="32">
@@ -310,8 +476,26 @@ function displayLocalVideo() {
             <circle cx="12" cy="13" r="4"/>
         </svg>
     `;
+    cameraIcon.style.position = "relative";
+    cameraIcon.style.zIndex = "2";
+    cameraIconContainer.appendChild(cameraBackground);
+    cameraIconContainer.appendChild(cameraIcon);
 
-    // Add microphone icon SVG
+    // Add microphone icon with background
+    const micIconContainer = document.createElement("div");
+    micIconContainer.style.position = "relative";
+    micIconContainer.style.display = "none"; // Initially hidden
+    const micBackground = document.createElement("div");
+    micBackground.style.position = "absolute";
+    micBackground.style.width = "72px";
+    micBackground.style.height = "72px";
+    micBackground.style.borderRadius = "50%";
+    micBackground.style.backgroundColor = "black";
+    micBackground.style.opacity = "0.5";
+    micBackground.style.top = "50%";
+    micBackground.style.left = "50%";
+    micBackground.style.transform = "translate(-50%, -50%)";
+    micBackground.style.zIndex = "1";
     const micIcon = document.createElement("div");
     micIcon.innerHTML = `
         <svg viewBox="0 0 24 24" fill="none" stroke="grey" stroke-width="2" width="32" height="32">
@@ -321,17 +505,67 @@ function displayLocalVideo() {
             <line x1="8" y1="23" x2="16" y2="23"/>
         </svg>
     `;
+    micIcon.style.position = "relative";
+    micIcon.style.zIndex = "2";
+    micIconContainer.appendChild(micBackground);
+    micIconContainer.appendChild(micIcon);
 
-    deviceIconContainer.appendChild(cameraIcon);
-    deviceIconContainer.appendChild(micIcon);
+    deviceIconContainer.appendChild(cameraIconContainer);
+    deviceIconContainer.appendChild(micIconContainer);
     localPlayerContainer.appendChild(deviceIconContainer);
     document.getElementById('video-container').appendChild(localPlayerContainer);
     localVideoTrack.play(localPlayerContainer);
 
     // Store references to the icons for later updates
     localPlayerContainer.deviceIconContainer = deviceIconContainer;
+    localPlayerContainer.cameraIconContainer = cameraIconContainer;
+    localPlayerContainer.micIconContainer = micIconContainer;
     localPlayerContainer.cameraIcon = cameraIcon.querySelector('svg');
     localPlayerContainer.micIcon = micIcon.querySelector('svg');
+}
+
+// Update local video position based on users in channel
+function updateLocalVideoPosition() {
+    const localPlayerContainer = document.getElementById(uid);
+    if (!localPlayerContainer) return;
+    log("updateLocalVideoPosition - localPlayerContainer true");
+
+    // Check if we are the first user (index 0) and if there are other users
+    const isFirstUser = usersInChannel[0]?.uid === uid;
+    const hasOtherUsers = usersInChannel.length > 1;
+
+    log("updateLocalVideoPosition " + isFirstUser + " " + hasOtherUsers);
+    if (isFirstUser && hasOtherUsers) {
+        // Shrink to bottom right
+        log("updateLocalVideoPosition - Local user is first user and there are other users");
+        localPlayerContainer.style.transition = "all 0.3s ease-in-out";
+        localPlayerContainer.style.width = "20%";
+        localPlayerContainer.style.height = "20%";
+        localPlayerContainer.style.top = "auto";
+        localPlayerContainer.style.left = "auto";
+        localPlayerContainer.style.bottom = "20px";
+        localPlayerContainer.style.right = "20px";
+        localPlayerContainer.style.transform = "none";
+    } else {
+        // Expand from bottom right
+        log("updateLocalVideoPosition - Local user is alone or not the first user");
+        localPlayerContainer.style.transition = "all 0.3s ease-in-out";
+        localPlayerContainer.style.width = "100%";
+        localPlayerContainer.style.height = "100%";
+        // Keep bottom/right for the animation
+        localPlayerContainer.style.top = "auto";
+        localPlayerContainer.style.left = "auto";
+        localPlayerContainer.style.bottom = "20px";
+        localPlayerContainer.style.right = "20px";
+        localPlayerContainer.style.transform = "none";
+        // After the transition, reset to top/left
+        setTimeout(() => {
+            localPlayerContainer.style.top = "0";
+            localPlayerContainer.style.left = "0";
+            localPlayerContainer.style.bottom = "auto";
+            localPlayerContainer.style.right = "auto";
+        }, 300); // match the transition duration
+    }
 }
 
 // Update device icons in local video container
@@ -340,6 +574,8 @@ function updateLocalVideoCameraIcon() {
     if (!localPlayerContainer || !localPlayerContainer.deviceIconContainer) return;
 
     const iconContainer = localPlayerContainer.deviceIconContainer;
+    const cameraIconContainer = localPlayerContainer.cameraIconContainer;
+    const micIconContainer = localPlayerContainer.micIconContainer;
     const cameraIcon = localPlayerContainer.cameraIcon;
     const micIcon = localPlayerContainer.micIcon;
 
@@ -367,33 +603,43 @@ function updateLocalVideoCameraIcon() {
     styleIcon(cameraIcon, showCamera);
     styleIcon(micIcon, showMic);
 
-    // Hide individual icons if they shouldn't be shown
-    cameraIcon.style.display = showCamera ? "block" : "none";
-    micIcon.style.display = showMic ? "block" : "none";
+    // Show/hide individual icon containers
+    cameraIconContainer.style.display = showCamera ? "block" : "none";
+    micIconContainer.style.display = showMic ? "block" : "none";
 }
 
 // Display remote video
 function displayRemoteUser(user) {
     const remotePlayerContainer = document.createElement("div");
     remotePlayerContainer.id = user.uid.toString();
-    remotePlayerContainer.style.width = "640px";
-    remotePlayerContainer.style.height = "480px";
-    remotePlayerContainer.style.position = "relative";
+    remotePlayerContainer.style.width = "100%";
+    remotePlayerContainer.style.height = "100%";
+    remotePlayerContainer.style.position = "absolute";
+    remotePlayerContainer.style.top = "0";
+    remotePlayerContainer.style.left = "0";
+    remotePlayerContainer.style.zIndex = "1";
+    remotePlayerContainer.style.background = "#00C2FF";
+    remotePlayerContainer.style.background = "radial-gradient(circle,rgba(0, 194, 255, 1) 0%, rgba(143, 143, 143, 1) 100%)";
     
     // Create a div for the user ID text
     const uidText = document.createElement("div");
-    uidText.textContent = `Remote user ${user.uid}`;
+    uidText.textContent = `${user.uid}`;
     uidText.style.position = "absolute";
-    uidText.style.top = "50%";
-    uidText.style.left = "50%";
-    uidText.style.transform = "translate(-50%, -50%)";
+    uidText.style.bottom = "20px";
+    uidText.style.left = "20px";
     uidText.style.color = "white";
     uidText.style.fontSize = "24px";
     uidText.style.textShadow = "2px 2px 4px rgba(0,0,0,0.5)";
     uidText.style.zIndex = "1";
+    uidText.style.padding = "8px 12px";
+    uidText.style.backgroundColor = "rgba(0, 0, 0, 0.5)";
+    uidText.style.borderRadius = "4px";
     
-    document.body.append(remotePlayerContainer);
+    document.getElementById('video-container').appendChild(remotePlayerContainer);
     remotePlayerContainer.appendChild(uidText);
+
+    // Update local video position after adding remote user
+    updateLocalVideoPosition();
 }
 
 // Play remote video in the container
@@ -401,6 +647,16 @@ function playRemoteVideo(user) {
     const remotePlayerContainer = document.getElementById(user.uid);
     if (remotePlayerContainer) {
         user.videoTrack.play(remotePlayerContainer);
+    }
+}
+
+// Update user state in usersInChannel array
+function updateUserState(uid, micState, camState) {
+    const idx = usersInChannel.findIndex(u => u.uid === uid);
+    if (idx !== -1) {
+        usersInChannel[idx].mic = micState;
+        usersInChannel[idx].cam = camState;
+        logUsersInChannel();
     }
 }
 
@@ -643,27 +899,8 @@ function startBasicCall() {
 // Join a channel and publish local media
 async function joinChannel() {
     try {
-        log("Joining channel...");
-        const appId = document.getElementById('appId').value;
-        const channelInput = document.getElementById('channel').value;
-        channel = channelInput || generateRandomChannel(5);
-        log(`Using channel name: ${channel}`);
-        
-        // Initialize client if needed
-        if (!client) {
-            initializeClient();
-        }
-        
-        uid = await client.join(appId, channel, null, 0);
-        console.log(`Join resolved to UID: ${uid}.`);
-        log(`Join resolved to UID: ${uid}.`);
-        
-        // Reset user state for new connection
-        userState.isMicMuted = false;
-        userState.isMicCapturing = true;
-        userState.isCameraMuted = false;
-        userState.isCameraCapturing = true;
-        
+        //get cameras and mics and create local tracks first
+        log("Getting cameras first time");
         // Get available cameras and populate dropdown
         try {
             const cameras = await AgoraRTC.getCameras();
@@ -704,13 +941,92 @@ async function joinChannel() {
             console.error('Error getting cameras:', error);
             log('Error getting cameras: ' + error.message);
         }
-        
-        // Create and publish tracks
+
+        log("Getting microphones first time");
+        try {
+            const microphones = await AgoraRTC.getMicrophones();
+            console.log("Available microphones:", microphones);
+            
+            // Clear existing devices
+            microphoneDevices.clear();
+            
+            // Store microphone devices
+            microphones.forEach(microphone => {
+                microphoneDevices.set(microphone.deviceId, microphone.label);
+            });
+            
+            // Log the updated microphone devices map
+            log("Updated microphone devices:");
+            microphoneDevices.forEach((label, deviceId) => {
+                log(`- ${label || 'Unnamed Microphone'} (${deviceId})`);
+            });
+            
+            // Update select element
+            const microphoneSelect = document.getElementById("microphoneSelect");
+            if (!microphoneSelect) {
+                console.error("Microphone select element not found");
+                return;
+            }
+            
+            // Clear existing options except the first one
+            while (microphoneSelect.options.length > 1) {
+                microphoneSelect.remove(1);
+            }
+            
+            // Add microphone options
+            microphones.forEach(microphone => {
+                const option = document.createElement("option");
+                option.value = microphone.deviceId;
+                option.text = microphone.label || `Microphone ${microphoneSelect.options.length}`;
+                microphoneSelect.appendChild(option);
+            });
+            
+            // Enable select if we have microphones
+            microphoneSelect.disabled = microphones.length === 0;
+            
+            // Select first microphone if available
+            if (microphones.length > 0) {
+                microphoneSelect.value = microphones[0].deviceId;
+            }
+        } catch (error) {
+            console.error("Error updating microphone list:", error);
+            log(`Error updating microphone list: ${error.message}`);
+        }
+
+        uid = generateRandomUID(5)
+        //create local tracks next
         await createLocalTracks();
-        await publishLocalTracks();
-        
-        // Display video
         displayLocalVideo();
+
+        //join the channel with a random 5 digit UID
+        log("Joining channel...");
+        const appId = document.getElementById('appId').value;
+        const channelInput = document.getElementById('channel').value;
+        channel = channelInput || generateRandomChannel(5);
+        log(`Using channel name: ${channel}`);
+        
+        // Initialize client if needed
+        if (!client) {
+            initializeClient();
+        }
+        
+        await client.join(appId, channel, null, uid);
+        console.log(`Join resolved to UID: ${uid}.`);
+        log(`Join resolved to UID: ${uid}.`);
+        
+        // Track local user as index 0 in usersInChannel
+        usersInChannel = [];
+        usersInChannel.push({ uid, mic: 'unmuted', cam: 'unmuted', metadata: '' });
+        logUsersInChannel();
+        
+        // Reset user state for new connection.
+        userState.isMicMuted = false;
+        userState.isMicCapturing = true;
+        userState.isCameraMuted = false;
+        userState.isCameraCapturing = true;
+        
+        // publish tracks
+        await publishLocalTracks();
         console.log("Publish success!");
         
         // Enable control buttons and update their states
@@ -753,9 +1069,6 @@ async function joinChannel() {
             joinButton.style.backgroundColor = '#00c2ff';
         }
 
-        // Initialize camera and microphone lists after joining
-        await updateCameraList();
-        await updateMicrophoneList();
     } catch (error) {
         console.error('Error joining channel:', error);
         log('Error joining channel: ' + error.message);
@@ -786,6 +1099,7 @@ AgoraRTC.on("microphone-changed", async (info) => {
 
 // Function to update camera list
 async function updateCameraList() {
+    log("updateCameraList");
     try {
         const cameras = await AgoraRTC.getCameras();
         console.log("Available cameras:", cameras);
@@ -839,6 +1153,7 @@ async function updateCameraList() {
 
 // Function to update microphone list
 async function updateMicrophoneList() {
+    log("updateMicrophoneList");
     try {
         const microphones = await AgoraRTC.getMicrophones();
         console.log("Available microphones:", microphones);
@@ -889,5 +1204,124 @@ async function updateMicrophoneList() {
         log(`Error updating microphone list: ${error.message}`);
     }
 }
+
+// Helper to log usersInChannel array to the log div
+function logUsersInChannel() {
+    log('usersInChannel: ' + JSON.stringify(usersInChannel, null, 2));
+}
+
+// Add or update device icons in remote player container
+function updateRemotePlayerContainer(uid) {
+    const remotePlayerContainer = document.getElementById(uid);
+    if (!remotePlayerContainer) return;
+
+    // Remove any existing device icon container
+    let deviceIconContainer = remotePlayerContainer.querySelector('.remote-device-icon-container');
+    if (deviceIconContainer) {
+        deviceIconContainer.remove();
+    }
+
+    // Find user state
+    const user = usersInChannel.find(u => u.uid === uid);
+    if (!user) return;
+
+    // Only show icons if either mic or cam is muted
+    const showCamera = user.cam === 'muted';
+    const showMic = user.mic === 'muted';
+    if (!showCamera && !showMic) return;
+
+    // Create device icon container
+    deviceIconContainer = document.createElement('div');
+    deviceIconContainer.className = 'remote-device-icon-container';
+    deviceIconContainer.style.position = 'absolute';
+    deviceIconContainer.style.top = '20px';
+    deviceIconContainer.style.right = '20px';
+    deviceIconContainer.style.display = 'flex';
+    deviceIconContainer.style.gap = '20px';
+    deviceIconContainer.style.zIndex = '3';
+    deviceIconContainer.style.justifyContent = 'center';
+    deviceIconContainer.style.alignItems = 'center';
+
+    // Helper to create icon with black circle
+    function createIcon(svg) {
+        const iconContainer = document.createElement('div');
+        iconContainer.style.position = 'relative';
+        iconContainer.style.width = '48px';
+        iconContainer.style.height = '48px';
+        iconContainer.style.display = 'flex';
+        iconContainer.style.alignItems = 'center';
+        iconContainer.style.justifyContent = 'center';
+
+        const bg = document.createElement('div');
+        bg.style.position = 'absolute';
+        bg.style.width = '48px';
+        bg.style.height = '48px';
+        bg.style.borderRadius = '50%';
+        bg.style.backgroundColor = 'black';
+        bg.style.opacity = '0.5';
+        bg.style.top = '0';
+        bg.style.left = '0';
+        bg.style.zIndex = '1';
+
+        const icon = document.createElement('div');
+        icon.innerHTML = svg;
+        icon.style.position = 'relative';
+        icon.style.zIndex = '2';
+        icon.style.display = 'flex';
+        icon.style.alignItems = 'center';
+        icon.style.justifyContent = 'center';
+        icon.style.width = '32px';
+        icon.style.height = '32px';
+
+        iconContainer.appendChild(bg);
+        iconContainer.appendChild(icon);
+        return iconContainer;
+    }
+
+    // Camera icon SVG
+    const cameraSVG = `<svg viewBox="0 0 24 24" fill="none" stroke="#f44336" stroke-width="2" width="32" height="32"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>`;
+    // Mic icon SVG
+    const micSVG = `<svg viewBox="0 0 24 24" fill="none" stroke="#f44336" stroke-width="2" width="32" height="32"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>`;
+
+    if (showCamera) deviceIconContainer.appendChild(createIcon(cameraSVG));
+    if (showMic) deviceIconContainer.appendChild(createIcon(micSVG));
+
+    remotePlayerContainer.appendChild(deviceIconContainer);
+}
+
+// Function to handle URL query parameters
+function handleUrlParameters() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const appId = urlParams.get('appid');
+    const channelName = urlParams.get('channel');
+
+    // Populate App ID if present
+    if (appId) {
+        const appIdInput = document.getElementById('appId');
+        appIdInput.value = appId;
+        // Trigger input event to update join button state
+        appIdInput.dispatchEvent(new Event('input'));
+    }
+
+    // Populate Channel if present
+    if (channelName) {
+        const channelInput = document.getElementById('channel');
+        channelInput.value = channelName;
+    }
+
+    // If both parameters are present, trigger join
+    if (appId && channelName) {
+        // Use setTimeout to ensure the page is fully loaded
+        setTimeout(() => {
+            const joinButton = document.getElementById('join');
+            if (!joinButton.disabled) {
+                joinButton.click();
+            }
+        }, 100);
+    }
+}
+
+// Call handleUrlParameters when the page loads
+window.addEventListener('DOMContentLoaded', handleUrlParameters);
 
 startBasicCall();

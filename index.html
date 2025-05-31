@@ -182,40 +182,42 @@
     </style>
 </head>
 <body>
-    <div class="control-bar">
-        <div class="agora-icon" style="margin-bottom: 30px; display: flex; justify-content: center; align-items: center;">
+    <div class="control-bar" style="flex-direction: column; align-items: center; position: relative;">
+        <div class="agora-icon" id="agoraIcon" style="margin-top: 80px; margin-bottom: 32px; display: flex; justify-content: center; align-items: center; cursor: pointer;">
             <img src="https://cdn.prod.website-files.com/660affa848e8af81bdd03909/66b3cd94a81a4b1b39300602_favicon-32x32.png" alt="Agora icon" width="36" height="36" style="display: block;" />
         </div>
-        <button id="captureMic" class="control-button" title="Enable/Disable Microphone" disabled>
-            <div class="mic-status not-joined"></div>
-            <svg viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2">
-                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-                <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-                <line x1="12" y1="19" x2="12" y2="23"/>
-                <line x1="8" y1="23" x2="16" y2="23"/>
-            </svg>
-        </button>
-        <button id="muteMic" class="control-button" title="Mute/Unmute Microphone" disabled>
-            <svg viewBox="0 0 24 24" fill="none" stroke="grey" stroke-width="2">
-                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-                <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-                <line x1="12" y1="19" x2="12" y2="23"/>
-                <line x1="8" y1="23" x2="16" y2="23"/>
-            </svg>
-        </button>
-        <button id="captureCamera" class="control-button" title="Enable/Disable Camera" disabled>
-            <div class="camera-status not-joined"></div>
-            <svg viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2">
-                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
-                <circle cx="12" cy="13" r="4"/>
-            </svg>
-        </button>
-        <button id="muteCamera" class="control-button" title="Mute/Unmute Camera" disabled>
-            <svg viewBox="0 0 24 24" fill="none" stroke="grey" stroke-width="2">
-                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
-                <circle cx="12" cy="13" r="4"/>
-            </svg>
-        </button>
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 28px; width: 100%;">
+            <button id="captureMic" class="control-button" title="Enable/Disable Microphone" disabled>
+                <div class="mic-status not-joined"></div>
+                <svg viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2">
+                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                    <line x1="12" y1="19" x2="12" y2="23"/>
+                    <line x1="8" y1="23" x2="16" y2="23"/>
+                </svg>
+            </button>
+            <button id="muteMic" class="control-button" title="Mute/Unmute Microphone" disabled>
+                <svg viewBox="0 0 24 24" fill="none" stroke="grey" stroke-width="2">
+                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                    <line x1="12" y1="19" x2="12" y2="23"/>
+                    <line x1="8" y1="23" x2="16" y2="23"/>
+                </svg>
+            </button>
+            <button id="captureCamera" class="control-button" title="Enable/Disable Camera" disabled>
+                <div class="camera-status not-joined"></div>
+                <svg viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2">
+                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                    <circle cx="12" cy="13" r="4"/>
+                </svg>
+            </button>
+            <button id="muteCamera" class="control-button" title="Mute/Unmute Camera" disabled>
+                <svg viewBox="0 0 24 24" fill="none" stroke="grey" stroke-width="2">
+                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                    <circle cx="12" cy="13" r="4"/>
+                </svg>
+            </button>
+        </div>
     </div>
     <div class="main-column">
         <div class="header" id="header">
@@ -245,6 +247,8 @@
             <div id="log"></div>
         </div>
     </div>
+    <!-- Share Link Modal -->
+    <div id="shareLinkModal" style="display:none; position:absolute; top:90px; left:80px; z-index:1000;"></div>
     <!-- Include the JavaScript file -->
     <script src="https://download.agora.io/sdk/release/AgoraRTC_N.js"></script>
     <script src="./simple.js"></script>
