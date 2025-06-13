@@ -13,6 +13,7 @@ let isVideoCapturing = false;
 let cameraDevices = new Map(); // Store camera devices with their IDs and names
 let microphoneDevices = new Map(); // Store microphone devices with their IDs and names
 let myAgentsId = null;
+let agentUid = null;
 let crd = null; // Geolocation
 let agentOn = false;
 
@@ -157,8 +158,17 @@ function initializeClient() {
 // Handle client events
 function setupEventListeners() {
     client.on("user-joined", async (user) => {
-        console.log(`user ${user.uid} joined channel`);
-        log(`user ${user.uid} joined channel`);
+        if (user.uid.includes("agent")) {
+            console.log(`Agent ${user.uid} joined channel`);
+            log(`Agent ${user.uid} joined channel`);
+            usersInChannel.push({
+                uid: user.uid,
+                mic: 'unmuted',
+                cam: 'muted',
+                metadata: 'AIAgent'
+            });
+            //in the future, display the ai agent in a different way that regular user
+        } else {
         // Add remote user to usersInChannel
         usersInChannel.push({
             uid: user.uid,
@@ -168,6 +178,7 @@ function setupEventListeners() {
         });
         displayRemoteUser(user);
         logUsersInChannel();
+    }
     });
 
     client.on("user-left", (user) => {
@@ -200,7 +211,11 @@ function setupEventListeners() {
         if (mediaType === "audio") {
             user.audioTrack.play();
         }
-        updateRemotePlayerContainer(user.uid);
+        if (user.uid.includes("agent")) {
+            console.log(`Agent ${user.uid} can speak.`);
+        } else {
+            updateRemotePlayerContainer(user.uid);
+        }
     });
 
     client.on("user-unpublished", (user, mediaType) => {
@@ -719,7 +734,9 @@ async function leaveChannel() {
     const muteMicButton = document.getElementById('muteMic');
     const captureCameraButton = document.getElementById('captureCamera');
     const muteCameraButton = document.getElementById('muteCamera');
-    
+    const aiStatus = aiButton.querySelector('.ai-status');
+    const aiIcon = aiButton.querySelector('svg');
+
     if (captureMicButton && muteMicButton && captureCameraButton && muteCameraButton) {
         [captureMicButton, muteMicButton, captureCameraButton, muteCameraButton].forEach(btn => btn.disabled = true);
         
@@ -737,6 +754,10 @@ async function leaveChannel() {
             [muteMicIcon, muteCameraIcon].forEach(icon => icon.style.stroke = 'grey');
         }
     }
+
+    aiButton.disabled = true;
+    aiStatus.className = 'ai-status not-joined';
+    aiIcon.style.stroke = 'black';
     
     if (window.setLeaveButtonState) window.setLeaveButtonState(false);
 
@@ -919,11 +940,10 @@ function setupButtonHandlers() {
                 aiButton.querySelector('.ai-status').className = 'ai-status joined';
                 aiButton.querySelector('svg').style.stroke = 'white';
             } else {
-                //start the agent
-            const agent = generateRandomUID(5);
+            //start the agent
             const greeting = "Hello, " + uid + ". I know about the weather and I think I know about yours. Tell me what it's like by you outside.";
             const prompt = "You are a helpful chatbot that can answer questions about the weather at the user's location, which is " + crd.latitude + " latitude and " + crd.longitude + " longitude. You can also answer questions about the user's location, which is " + crd.latitude + " latitude and " + crd.longitude + " longitude. You know about the weather in general, the historical weather patterns of that general location, and the upcoming weather predections for that area. When the user first speaks, they will tell you their perception of the weather at their coordinates. If they are incorrect based on your information, then tell them they are wrong, and tell them the correct weather. If they are correct, then tell them you are glad to hear it. If they ask you about the weather, then tell them the weather at their coordinates. If they ask you about the weather in general, then tell them the weather in general. If they ask you about the historical weather patterns of that general location, then tell them the historical weather patterns of that general location. If they ask you about the upcoming weather predections for that area, then tell them the upcoming weather predections for that area.";
-            agentOn = startAgent(agent, channel, agent, uid, prompt, greeting);
+            agentOn = startAgent(agentUid, channel, agentUid, uid, prompt, greeting);
             aiButton.querySelector('.ai-status').className = 'ai-status active';
             aiButton.querySelector('svg').style.stroke = 'white';
             }
@@ -1050,6 +1070,8 @@ async function joinChannel() {
         const uidInput = document.getElementById('uid').value;
         channel = channelInput || generateRandomChannel(5);
         uid = uidInput || generateRandomUID(5);
+        agentUid = generateRandomUID(5) + "agent";
+        document.getElementById('uid').value = uid;
         log(`Using channel name: ${channel}`);
         
         // Initialize client if needed
