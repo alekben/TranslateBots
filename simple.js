@@ -1149,8 +1149,8 @@ async function joinChannel() {
         // Reset button states on error
         updateButtonStates();
         crd = {
-         latitude: 0,      // San Francisco
-         longitude: 0,
+         latitude: 37.7749,      // San Francisco
+         longitude: -122.4194,
          altitude: 15.0,
          accuracy: 10.0,
          altitudeAccuracy: 5.0,
