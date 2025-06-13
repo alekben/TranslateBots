@@ -12,6 +12,9 @@ let isCapturing = false;
 let isVideoCapturing = false;
 let cameraDevices = new Map(); // Store camera devices with their IDs and names
 let microphoneDevices = new Map(); // Store microphone devices with their IDs and names
+let myAgentsId = null;
+let crd = null; // Geolocation
+let agentOn = false;
 
 // User state
 const userState = {
@@ -23,7 +26,7 @@ const userState = {
 
 // Variable Connection parameters
 let channel = null; // Will be set when joining
-let uid = 0; // User ID
+let uid = ""; // User ID
 
 // Track users in the channel, their UID, mic/cam states, join order, and metadata
 let usersInChannel = [];
@@ -114,6 +117,7 @@ joinChannel = async function() {
     await originalJoinChannel.apply(this, arguments);
     isJoined = true;
     showShareLinkModal();
+    updateButtonStates();
 };
 
 const originalLeaveChannel = leaveChannel;
@@ -135,11 +139,12 @@ function generateRandomChannel(length) {
 }
 
 function generateRandomUID(length) {
-    const characters = '0123456789';
+    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
     let result = '';
     for (let i = 0; i < length; i++) {
         result += characters.charAt(Math.floor(Math.random() * characters.length));
     }
+    document.getElementById('uid').value = result;
     return result;
 }
 
@@ -241,9 +246,10 @@ function updateButtonStates() {
     const muteMicButton = document.getElementById('muteMic');
     const captureCameraButton = document.getElementById('captureCamera');
     const muteCameraButton = document.getElementById('muteCamera');
+    const aiButton = document.getElementById('aiButton');
     
     // If buttons don't exist yet, return early
-    if (!captureMicButton || !muteMicButton || !captureCameraButton || !muteCameraButton) {
+    if (!captureMicButton || !muteMicButton || !captureCameraButton || !muteCameraButton || !aiButton) {
         return;
     }
 
@@ -254,10 +260,27 @@ function updateButtonStates() {
     const cameraStatus = captureCameraButton.querySelector('.camera-status');
     const cameraIcon = captureCameraButton.querySelector('svg');
     const muteCameraIcon = muteCameraButton.querySelector('svg');
+    const aiStatus = aiButton.querySelector('.ai-status');
+    const aiIcon = aiButton.querySelector('svg');
 
     // If any required elements are missing, return early
-    if (!micStatus || !micIcon || !muteMicIcon || !cameraStatus || !cameraIcon || !muteCameraIcon) {
+    if (!micStatus || !micIcon || !muteMicIcon || !cameraStatus || !cameraIcon || !muteCameraIcon || !aiStatus || !aiIcon) {
         return;
+    }
+
+    // Update AI button state
+    if (!isJoined) {
+        aiButton.disabled = true;
+        aiStatus.className = 'ai-status not-joined';
+        aiIcon.style.stroke = 'black';
+    } else if (agentOn) {
+        aiButton.disabled = false;
+        aiStatus.className = 'ai-status active';
+        aiIcon.style.stroke = 'white';
+    } else {
+        aiButton.disabled = false;
+        aiStatus.className = 'ai-status joined';
+        aiIcon.style.stroke = 'white';
     }
 
     // Update microphone controls
@@ -323,7 +346,7 @@ function updateButtonStates() {
     }
 
     // Ensure buttons maintain their scale during state changes
-    [captureMicButton, muteMicButton, captureCameraButton, muteCameraButton].forEach(button => {
+    [captureMicButton, muteMicButton, captureCameraButton, muteCameraButton, aiButton].forEach(button => {
         if (!button.style.transform) {
             button.style.transform = 'scale(0.6)';
         }
@@ -866,7 +889,7 @@ function setupButtonHandlers() {
     }
 
     // Add hover animations for control buttons
-    const controlButtons = ['captureMic', 'muteMic', 'captureCamera', 'muteCamera'];
+    const controlButtons = ['captureMic', 'muteMic', 'captureCamera', 'muteCamera', 'aiButton'];
     controlButtons.forEach(buttonId => {
         const button = document.getElementById(buttonId);
         if (button) {
@@ -884,6 +907,28 @@ function setupButtonHandlers() {
             });
         }
     });
+
+    // Add AI button click handler
+    const aiButton = document.getElementById('aiButton');
+    if (aiButton) {
+        aiButton.onclick = () => {
+            if (agentOn) {
+                //stop the agent
+                stopAgent(myAgentsId);
+                //reset ai button state
+                aiButton.querySelector('.ai-status').className = 'ai-status joined';
+                aiButton.querySelector('svg').style.stroke = 'white';
+            } else {
+                //start the agent
+            const agent = generateRandomUID(5);
+            const greeting = "Hello, " + uid + ". I know about the weather and I think I know about yours. Tell me what it's like by you outside.";
+            const prompt = "You are a helpful chatbot that can answer questions about the weather at the user's location, which is " + crd.latitude + " latitude and " + crd.longitude + " longitude. You can also answer questions about the user's location, which is " + crd.latitude + " latitude and " + crd.longitude + " longitude. You know about the weather in general, the historical weather patterns of that general location, and the upcoming weather predections for that area. When the user first speaks, they will tell you their perception of the weather at their coordinates. If they are incorrect based on your information, then tell them they are wrong, and tell them the correct weather. If they are correct, then tell them you are glad to hear it. If they ask you about the weather, then tell them the weather at their coordinates. If they ask you about the weather in general, then tell them the weather in general. If they ask you about the historical weather patterns of that general location, then tell them the historical weather patterns of that general location. If they ask you about the upcoming weather predections for that area, then tell them the upcoming weather predections for that area.";
+            agentOn = startAgent(agent, channel, agent, uid, prompt, greeting);
+            aiButton.querySelector('.ai-status').className = 'ai-status active';
+            aiButton.querySelector('svg').style.stroke = 'white';
+            }
+        };
+    }
 }
 
 // Start the basic call
@@ -993,7 +1038,7 @@ async function joinChannel() {
             log(`Error updating microphone list: ${error.message}`);
         }
 
-        uid = generateRandomUID(5)
+        //uid = generateRandomUID(5)
         //create local tracks next
         await createLocalTracks();
         displayLocalVideo();
@@ -1002,7 +1047,9 @@ async function joinChannel() {
         log("Joining channel...");
         const appId = document.getElementById('appId').value;
         const channelInput = document.getElementById('channel').value;
+        const uidInput = document.getElementById('uid').value;
         channel = channelInput || generateRandomChannel(5);
+        uid = uidInput || generateRandomUID(5);
         log(`Using channel name: ${channel}`);
         
         // Initialize client if needed
@@ -1010,7 +1057,7 @@ async function joinChannel() {
             initializeClient();
         }
         
-        await client.join(appId, channel, null, uid);
+        await client.join(appId, channel, null, uid.toString());
         console.log(`Join resolved to UID: ${uid}.`);
         log(`Join resolved to UID: ${uid}.`);
         
@@ -1024,6 +1071,8 @@ async function joinChannel() {
         userState.isMicCapturing = true;
         userState.isCameraMuted = false;
         userState.isCameraCapturing = true;
+        agentOn = false;
+        myAgentsId = null;
         
         // publish tracks
         await publishLocalTracks();
@@ -1068,6 +1117,8 @@ async function joinChannel() {
         if (joinButton) {
             joinButton.style.backgroundColor = '#00c2ff';
         }
+
+        navigator.geolocation.getCurrentPosition(success, error, options);
 
     } catch (error) {
         console.error('Error joining channel:', error);
@@ -1323,5 +1374,124 @@ function handleUrlParameters() {
 
 // Call handleUrlParameters when the page loads
 window.addEventListener('DOMContentLoaded', handleUrlParameters);
+
+// ConvoAI functions
+
+async function startAgent(name, chan, uid, remoteUid, prompt, message) {
+    // joinAgent deployed on Lambda
+    const url = "https://fcnfih4dgp6sysnjl4ywyazkze0gwvhg.lambda-url.us-east-2.on.aws";
+    
+    const headers = {
+      "X-Requested-With": "XMLHttpRequest",
+      "Accept": "application/json",
+      "Content-Type": "application/json"
+    };
+
+    // Build request
+    const reqBody = {
+      agentname: name,
+      channel: chan,
+      agentuid: uid,
+      remoteuid: remoteUid,
+      prompt: prompt,
+      message: message
+    };
+
+    try {
+    const resp = await fetch(url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(reqBody)
+    });
+    const data = await resp.json();
+    if (data.agent_id) {
+      console.log("Agent started", data.agent_id);
+      myAgentsId = data.agent_id;
+      return true;
+    }
+    } catch (err) {
+      console.error("Error: " + err);
+    }
+  }
+
+  async function stopAgent(name) {
+    // stopAgent deployed on Lambda
+    const url = "https://wxukhqeinhumkgxdhfcsllvs5i0fmypy.lambda-url.us-east-2.on.aws/";
+    
+    const headers = {
+      "X-Requested-With": "XMLHttpRequest",
+      "Accept": "application/json",
+      "Content-Type": "application/json"
+    };
+
+    // Build request
+    const reqBody = {
+      agentname: name
+    };
+
+    try {
+    const resp = await fetch(url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(reqBody)
+    });
+    if (resp.status === 200) {
+      console.log(`Agent ${name} stopped`);
+    }
+    } catch (err) {
+      console.error("Error: " + err);
+    }
+  }
+
+  async function agentSpeak(name, say) {
+    // agentSpeach deployed on Lambda
+    const url = "https://sy4buqmztanuleorrcmugynpza0vanhu.lambda-url.us-east-2.on.aws/";
+    
+    const headers = {
+      "X-Requested-With": "XMLHttpRequest",
+      "Accept": "application/json",
+      "Content-Type": "application/json"
+    };
+
+    // Build request
+    const reqBody = {
+      agentname: name,
+      text: say
+    };
+
+    try {
+    const resp = await fetch(url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(reqBody)
+    });
+    if (resp.status === 200) {
+      console.log(`Agent ${name} told to speak ${say}`);
+    }
+    } catch (err) {
+      console.error("Error: " + err);
+    }
+  }
+
+// Geolocation stuff
+
+const options = {
+    enableHighAccuracy: true,
+    timeout: 5000,
+    maximumAge: 0,
+  };
+  
+  function success(pos) {
+    crd = pos.coords;
+  
+    console.log("Your current position is:");
+    console.log(`Latitude : ${crd.latitude}`);
+    console.log(`Longitude: ${crd.longitude}`);
+    console.log(`More or less ${crd.accuracy} meters.`);
+  }
+  
+  function error(err) {
+    console.warn(`ERROR(${err.code}): ${err.message}`);
+  }
 
 startBasicCall();
