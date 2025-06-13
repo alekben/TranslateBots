@@ -1148,6 +1148,15 @@ async function joinChannel() {
         log('Error joining channel: ' + error.message);
         // Reset button states on error
         updateButtonStates();
+        crd = {
+         latitude: 0,      // San Francisco
+         longitude: 0,
+         altitude: 15.0,
+         accuracy: 10.0,
+         altitudeAccuracy: 5.0,
+         heading: 90.0,
+         speed: 2.5
+        };
     }
 }
 
