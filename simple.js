@@ -1148,15 +1148,6 @@ async function joinChannel() {
         log('Error joining channel: ' + error.message);
         // Reset button states on error
         updateButtonStates();
-        crd = {
-         latitude: 37.7749,      // San Francisco
-         longitude: -122.4194,
-         altitude: 15.0,
-         accuracy: 10.0,
-         altitudeAccuracy: 5.0,
-         heading: 90.0,
-         speed: 2.5
-        };
     }
 }
 
@@ -1524,6 +1515,15 @@ const options = {
   
   function error(err) {
     console.warn(`ERROR(${err.code}): ${err.message}`);
+    crd = {
+     latitude: 37.7749,      // San Francisco
+     longitude: -122.4194,
+     altitude: 15.0,
+     accuracy: 10.0,
+     altitudeAccuracy: 5.0,
+     heading: 90.0,
+     speed: 2.5
+    };
   }
 
 startBasicCall();
