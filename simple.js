@@ -936,6 +936,7 @@ function setupButtonHandlers() {
             if (agentOn) {
                 //stop the agent
                 stopAgent(myAgentsId);
+                agentOn = false;
                 //reset ai button state
                 aiButton.querySelector('.ai-status').className = 'ai-status joined';
                 aiButton.querySelector('svg').style.stroke = 'white';
