@@ -188,7 +188,7 @@ function setupEventListeners() {
             uid: user.uid,
             mic: 'muted',
             cam: 'muted',
-            metadata: ''
+            metadata: 'Remote'
         });
     }
         displayRemoteUser(user);
