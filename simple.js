@@ -17,6 +17,13 @@ let agentUid = null;
 let crd = null; // Geolocation
 let agentOn = false;
 
+// Audio analysis variables for AI agent effects
+let audioContext = null;
+let analyser = null;
+let dataArray = null;
+let animationId = null;
+let agentAudioSource = null;
+
 // User state
 const userState = {
     isMicMuted: false,
@@ -85,6 +92,13 @@ function showShareLinkModal() {
             }, 50);
         };
     }
+    
+    // Auto-hide modal after 5 seconds
+    setTimeout(() => {
+        if (isShareModalOpen) {
+            hideShareLinkModal();
+        }
+    }, 5000);
 }
 
 function hideShareLinkModal() {
@@ -176,9 +190,10 @@ function setupEventListeners() {
             cam: 'muted',
             metadata: ''
         });
+    }
         displayRemoteUser(user);
         logUsersInChannel();
-    }
+
     });
 
     client.on("user-left", (user) => {
@@ -190,6 +205,10 @@ function setupEventListeners() {
         const remotePlayerContainer = document.getElementById(user.uid);
         remotePlayerContainer && remotePlayerContainer.remove();
         logUsersInChannel();
+        
+        // Update the grid layout after remote user leaves
+        updateRemoteUserGrid();
+        
         // Update local video position after remote user leaves
         updateLocalVideoPosition();
     });
@@ -210,6 +229,12 @@ function setupEventListeners() {
         }
         if (mediaType === "audio") {
             user.audioTrack.play();
+            
+            // Start audio analysis for AI agents
+            if (user.uid.includes("agent")) {
+                console.log(`Agent ${user.uid} audio track published, starting audio analysis`);
+                startAudioAnalysis(user.audioTrack);
+            }
         }
         if (user.uid.includes("agent")) {
             console.log(`Agent ${user.uid} can speak.`);
@@ -227,6 +252,13 @@ function setupEventListeners() {
             if (mediaType === 'audio') usersInChannel[idx].mic = 'muted';
             logUsersInChannel();
         }
+        
+        // Stop audio analysis if AI agent stops publishing audio
+        if (mediaType === 'audio' && user.uid.includes('agent')) {
+            console.log(`Agent ${user.uid} audio track unpublished, stopping audio analysis`);
+            stopAudioAnalysis();
+        }
+        
         // let's update the remotePlayerContainer here, based on the state of usersInChannel values
         // This is only firing because either .cam or .mic is now 'muted' so we should show an icon at least
         updateRemotePlayerContainer(user.uid);
@@ -251,8 +283,10 @@ function setupEventListeners() {
 
 function log(message) {
     const logDiv = document.getElementById("log");
-    logDiv.appendChild(document.createElement('div')).append(message);
-    logDiv.scrollTop = logDiv.scrollHeight; // Auto-scroll to bottom
+    if (logDiv) {
+        logDiv.appendChild(document.createElement('div')).append(message);
+        logDiv.scrollTop = logDiv.scrollHeight; // Auto-scroll to bottom
+    }
 }
 
 // Update microphone and camera button states based on track availability and user state
@@ -366,6 +400,29 @@ function updateButtonStates() {
             button.style.transform = 'scale(0.6)';
         }
     });
+    
+    // Ensure logsToggle button maintains its scale and update its state
+    const logsToggleButton = document.getElementById('logsToggle');
+    if (logsToggleButton) {
+        if (!logsToggleButton.style.transform) {
+            logsToggleButton.style.transform = 'scale(0.6)';
+        }
+        
+        // Update logs toggle button state based on join status
+        if (!isJoined) {
+            logsToggleButton.disabled = true;
+            logsToggleButton.querySelector('svg').style.stroke = 'grey';
+        } else {
+            logsToggleButton.disabled = false;
+            // Keep current stroke color (white or #00c2ff if logs are visible)
+            const logDiv = document.getElementById('log');
+            if (logDiv && logDiv.classList.contains('show-logs')) {
+                logsToggleButton.querySelector('svg').style.stroke = '#00c2ff';
+            } else {
+                logsToggleButton.querySelector('svg').style.stroke = 'white';
+            }
+        }
+    }
 }
 
 // Handle microphone capture toggle
@@ -650,34 +707,167 @@ function updateLocalVideoCameraIcon() {
 function displayRemoteUser(user) {
     const remotePlayerContainer = document.createElement("div");
     remotePlayerContainer.id = user.uid.toString();
-    remotePlayerContainer.style.width = "100%";
-    remotePlayerContainer.style.height = "100%";
-    remotePlayerContainer.style.position = "absolute";
-    remotePlayerContainer.style.top = "0";
-    remotePlayerContainer.style.left = "0";
+    remotePlayerContainer.style.position = "relative";
     remotePlayerContainer.style.zIndex = "1";
-    remotePlayerContainer.style.background = "#00C2FF";
-    remotePlayerContainer.style.background = "radial-gradient(circle,rgba(0, 194, 255, 1) 0%, rgba(143, 143, 143, 1) 100%)";
+    remotePlayerContainer.style.transition = "all 0.3s ease-in-out";
     
-    // Create a div for the user ID text
-    const uidText = document.createElement("div");
-    uidText.textContent = `${user.uid}`;
-    uidText.style.position = "absolute";
-    uidText.style.bottom = "20px";
-    uidText.style.left = "20px";
-    uidText.style.color = "white";
-    uidText.style.fontSize = "24px";
-    uidText.style.textShadow = "2px 2px 4px rgba(0,0,0,0.5)";
-    uidText.style.zIndex = "1";
-    uidText.style.padding = "8px 12px";
-    uidText.style.backgroundColor = "rgba(0, 0, 0, 0.5)";
-    uidText.style.borderRadius = "4px";
-    
-    document.getElementById('video-container').appendChild(remotePlayerContainer);
-    remotePlayerContainer.appendChild(uidText);
+    // Check if this is an AI agent
+    if (user.uid.includes('agent')) {
+        // AI Agent styling - black background
+        remotePlayerContainer.style.background = "#000000";
+        
+        // Create centered API.svg icon
+        const apiIcon = document.createElement("img");
+        apiIcon.src = "./API.svg";
+        apiIcon.style.position = "absolute";
+        apiIcon.style.top = "50%";
+        apiIcon.style.left = "50%";
+        apiIcon.style.transform = "translate(-50%, -50%)";
+        apiIcon.style.width = "160px";
+        apiIcon.style.height = "160px";
+        apiIcon.style.zIndex = "2";
+        apiIcon.style.transition = "filter 0.1s ease-out";
+        
+        // Store reference to the icon for audio effects
+        remotePlayerContainer.apiIcon = apiIcon;
+        
+        // Create a div for the user ID text
+        const uidText = document.createElement("div");
+        uidText.textContent = `AgoraAI`;
+        uidText.style.position = "absolute";
+        uidText.style.bottom = "20px";
+        uidText.style.left = "20px";
+        uidText.style.color = "white";
+        uidText.style.fontSize = "24px";
+        uidText.style.textShadow = "2px 2px 4px rgba(0,0,0,0.5)";
+        uidText.style.zIndex = "1";
+        uidText.style.padding = "8px 12px";
+        uidText.style.backgroundColor = "rgba(0, 0, 0, 0.5)";
+        uidText.style.borderRadius = "4px";
+        
+        document.getElementById('video-container').appendChild(remotePlayerContainer);
+        remotePlayerContainer.appendChild(apiIcon);
+        remotePlayerContainer.appendChild(uidText);
+    } else {
+        // Regular user styling - blue gradient background
+        remotePlayerContainer.style.background = "#00C2FF";
+        remotePlayerContainer.style.background = "radial-gradient(circle,rgba(0, 194, 255, 1) 0%, rgba(143, 143, 143, 1) 100%)";
+        
+        // Create a div for the user ID text
+        const uidText = document.createElement("div");
+        uidText.textContent = `${user.uid}`;
+        uidText.style.position = "absolute";
+        uidText.style.bottom = "20px";
+        uidText.style.left = "20px";
+        uidText.style.color = "white";
+        uidText.style.fontSize = "24px";
+        uidText.style.textShadow = "2px 2px 4px rgba(0,0,0,0.5)";
+        uidText.style.zIndex = "1";
+        uidText.style.padding = "8px 12px";
+        uidText.style.backgroundColor = "rgba(0, 0, 0, 0.5)";
+        uidText.style.borderRadius = "4px";
+        
+        document.getElementById('video-container').appendChild(remotePlayerContainer);
+        remotePlayerContainer.appendChild(uidText);
+    }
 
+    // Update the grid layout after adding remote user
+    updateRemoteUserGrid();
+    
     // Update local video position after adding remote user
     updateLocalVideoPosition();
+}
+
+// Update remote user grid layout based on number of remote users
+function updateRemoteUserGrid() {
+    // Get remote users (exclude local user only, include AI agents)
+    const remoteUsers = usersInChannel.filter(user => 
+        user.metadata !== 'Local'
+    );
+    
+    const remoteUserCount = remoteUsers.length;
+    
+    if (remoteUserCount === 0) {
+        return; // No remote users to arrange
+    }
+    
+    // Get the video container
+    const videoContainer = document.getElementById('video-container');
+    const containerWidth = videoContainer.offsetWidth;
+    const containerHeight = videoContainer.offsetHeight;
+    
+    // If container dimensions are not available yet, retry after a short delay
+    if (containerWidth === 0 || containerHeight === 0) {
+        setTimeout(updateRemoteUserGrid, 100);
+        return;
+    }
+    
+    // Calculate grid dimensions and cell sizes
+    let gridCols, gridRows, cellWidth, cellHeight;
+    
+    if (remoteUserCount === 1) {
+        // 1x1 grid - full container
+        gridCols = 1;
+        gridRows = 1;
+        cellWidth = containerWidth;
+        cellHeight = containerHeight;
+    } else if (remoteUserCount === 2) {
+        // 1x2 grid - side by side
+        gridCols = 2;
+        gridRows = 1;
+        cellWidth = containerWidth / 2;
+        cellHeight = containerHeight;
+    } else if (remoteUserCount === 3) {
+        // 2x2 grid with bottom right empty
+        gridCols = 2;
+        gridRows = 2;
+        cellWidth = containerWidth / 2;
+        cellHeight = containerHeight / 2;
+    } else if (remoteUserCount === 4) {
+        // 2x2 grid
+        gridCols = 2;
+        gridRows = 2;
+        cellWidth = containerWidth / 2;
+        cellHeight = containerHeight / 2;
+    }
+    
+    // Position each remote user in the grid
+    remoteUsers.forEach((user, index) => {
+        const userContainer = document.getElementById(user.uid);
+        if (!userContainer) return;
+        
+        let row, col;
+        
+        if (remoteUserCount === 1) {
+            row = 0;
+            col = 0;
+        } else if (remoteUserCount === 2) {
+            row = 0;
+            col = index;
+        } else if (remoteUserCount === 3) {
+            if (index === 0) {
+                row = 0; col = 0; // Top left
+            } else if (index === 1) {
+                row = 0; col = 1; // Top right
+            } else {
+                row = 1; col = 0; // Bottom left
+            }
+        } else if (remoteUserCount === 4) {
+            row = Math.floor(index / 2);
+            col = index % 2;
+        }
+        
+        // Calculate position
+        const left = col * cellWidth;
+        const top = row * cellHeight;
+        
+        // Apply styles
+        userContainer.style.position = "absolute";
+        userContainer.style.width = `${cellWidth}px`;
+        userContainer.style.height = `${cellHeight}px`;
+        userContainer.style.left = `${left}px`;
+        userContainer.style.top = `${top}px`;
+    });
 }
 
 // Play remote video in the container
@@ -722,6 +912,9 @@ async function leaveChannel() {
 
     // Leave the channel
     await client.leave();
+    
+    // Stop audio analysis
+    stopAudioAnalysis();
 
     // Reset user state
     userState.isMicMuted = false;
@@ -759,6 +952,13 @@ async function leaveChannel() {
     aiStatus.className = 'ai-status not-joined';
     aiIcon.style.stroke = 'black';
     
+    // Reset logs toggle button state
+    const logsToggleButton = document.getElementById('logsToggle');
+    if (logsToggleButton) {
+        logsToggleButton.disabled = true;
+        logsToggleButton.querySelector('svg').style.stroke = 'grey';
+    }
+    
     if (window.setLeaveButtonState) window.setLeaveButtonState(false);
 
     // Reset header state
@@ -770,9 +970,10 @@ async function leaveChannel() {
     const videoContainer = document.getElementById('video-container');
     videoContainer.innerHTML = '';
 
-    // Clear the log
+    // Clear the log and hide it
     const log = document.getElementById('log');
     log.innerHTML = '';
+    log.classList.remove('show-logs');
 
     // Reset join button color to white
     const joinButton = document.getElementById('join');
@@ -910,7 +1111,7 @@ function setupButtonHandlers() {
     }
 
     // Add hover animations for control buttons
-    const controlButtons = ['captureMic', 'muteMic', 'captureCamera', 'muteCamera', 'aiButton'];
+    const controlButtons = ['captureMic', 'muteMic', 'captureCamera', 'muteCamera', 'aiButton', 'logsToggle'];
     controlButtons.forEach(buttonId => {
         const button = document.getElementById(buttonId);
         if (button) {
@@ -950,6 +1151,109 @@ function setupButtonHandlers() {
             }
         };
     }
+
+    // Add logs toggle button click handler
+    const logsToggleButton = document.getElementById('logsToggle');
+    if (logsToggleButton) {
+        // Initialize logs toggle button to disabled state
+        logsToggleButton.disabled = true;
+        logsToggleButton.querySelector('svg').style.stroke = 'grey';
+        
+        logsToggleButton.onclick = () => {
+            const logDiv = document.getElementById('log');
+            if (logDiv) {
+                const isVisible = logDiv.classList.contains('show-logs');
+                if (isVisible) {
+                    logDiv.classList.remove('show-logs');
+                    logsToggleButton.querySelector('svg').style.stroke = 'white';
+                } else {
+                    logsToggleButton.classList.add('show-logs');
+                    logsToggleButton.querySelector('svg').style.stroke = '#00c2ff';
+                }
+            }
+        };
+    }
+}
+
+// Audio analysis functions for AI agent effects
+function setupAudioAnalysis() {
+    try {
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        analyser = audioContext.createAnalyser();
+        analyser.fftSize = 256;
+        const bufferLength = analyser.frequencyBinCount;
+        dataArray = new Uint8Array(bufferLength);
+        
+        console.log('Audio analysis setup complete');
+    } catch (error) {
+        console.error('Error setting up audio analysis:', error);
+    }
+}
+
+function startAudioAnalysis(audioTrack) {
+    if (!audioContext || !analyser) {
+        setupAudioAnalysis();
+    }
+    
+    try {
+        // Create audio source from the audio track
+        const mediaStreamTrack = audioTrack.getMediaStreamTrack();
+        if (mediaStreamTrack) {
+            agentAudioSource = audioContext.createMediaStreamSource(new MediaStream([mediaStreamTrack]));
+            agentAudioSource.connect(analyser);
+            analyser.connect(audioContext.destination);
+            
+            // Start the animation loop
+            animateAudioEffects();
+            console.log('Audio analysis started for AI agent');
+        }
+    } catch (error) {
+        console.error('Error starting audio analysis:', error);
+    }
+}
+
+function stopAudioAnalysis() {
+    if (animationId) {
+        cancelAnimationFrame(animationId);
+        animationId = null;
+    }
+    
+    if (agentAudioSource) {
+        try {
+            agentAudioSource.disconnect();
+            agentAudioSource = null;
+        } catch (error) {
+            console.error('Error disconnecting audio source:', error);
+        }
+    }
+}
+
+function animateAudioEffects() {
+    if (!analyser || !dataArray) return;
+    
+    analyser.getByteFrequencyData(dataArray);
+    
+    // Calculate average volume from frequency data
+    let sum = 0;
+    for (let i = 0; i < dataArray.length; i++) {
+        sum += dataArray[i];
+    }
+    const average = sum / dataArray.length;
+    
+    // Normalize to 0-1 range and apply to AI agent icons
+    const normalizedVolume = average / 255;
+    
+    // Apply brightness effect to all AI agent icons
+    document.querySelectorAll('[id*="agent"]').forEach(agentContainer => {
+        if (agentContainer.apiIcon) {
+            const brightness = 1 + (normalizedVolume * 2); // 1x to 3x brightness
+            const saturation = 1 + (normalizedVolume * 1.5); // 1x to 2.5x saturation
+            agentContainer.apiIcon.style.filter = `brightness(${brightness}) saturate(${saturation})`;
+        }
+    });
+    
+    // Continue animation loop
+    animationId = requestAnimationFrame(animateAudioEffects);
 }
 
 // Start the basic call
@@ -959,6 +1263,19 @@ function startBasicCall() {
         setupButtonHandlers();
         // Set global font family
         document.body.style.fontFamily = 'Jokker, Arial, sans-serif';
+        
+        // Ensure logs div starts hidden
+        const logDiv = document.getElementById('log');
+        if (logDiv) {
+            logDiv.classList.remove('show-logs');
+        }
+        
+        // Add window resize listener to update grid layout
+        window.addEventListener('resize', () => {
+            if (isJoined) {
+                updateRemoteUserGrid();
+            }
+        });
     };
 }
 
@@ -1059,13 +1376,7 @@ async function joinChannel() {
             log(`Error updating microphone list: ${error.message}`);
         }
 
-        //uid = generateRandomUID(5)
-        //create local tracks next
-        await createLocalTracks();
-        displayLocalVideo();
-
-        //join the channel with a random 5 digit UID
-        log("Joining channel...");
+        //get channel join params
         const appId = document.getElementById('appId').value;
         const channelInput = document.getElementById('channel').value;
         const uidInput = document.getElementById('uid').value;
@@ -1074,7 +1385,16 @@ async function joinChannel() {
         agentUid = generateRandomUID(5) + "agent";
         document.getElementById('uid').value = uid;
         log(`Using channel name: ${channel}`);
-        
+
+        //create local tracks next
+        await createLocalTracks();
+
+        //display local video container
+        displayLocalVideo();
+
+        //join the channel with params
+        log("Joining channel...");
+
         // Initialize client if needed
         if (!client) {
             initializeClient();
@@ -1086,8 +1406,11 @@ async function joinChannel() {
         
         // Track local user as index 0 in usersInChannel
         usersInChannel = [];
-        usersInChannel.push({ uid, mic: 'unmuted', cam: 'unmuted', metadata: '' });
+        usersInChannel.push({ uid, mic: 'unmuted', cam: 'unmuted', metadata: 'Local' });
         logUsersInChannel();
+        
+        // Update remote user grid layout if there are existing remote users
+        updateRemoteUserGrid();
         
         // Reset user state for new connection.
         userState.isMicMuted = false;
@@ -1134,6 +1457,9 @@ async function joinChannel() {
         }
         
         if (window.setLeaveButtonState) window.setLeaveButtonState(true);
+
+        // Update button states after successful join
+        updateButtonStates();
 
         // Set join button color to blue
         const joinButton = document.getElementById('join');

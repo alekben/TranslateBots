@@ -11,6 +11,7 @@
             display: flex;
             min-height: 100vh;
             height: 100vh;
+            background: radial-gradient(circle, #666666 0%, #000000 100%);
         }
         .control-bar {
             width: 60px;
@@ -146,6 +147,17 @@
         .ai-status.active {
             background-color: #4CAF50;
         }
+        .logs-status {
+            position: absolute;
+            width: 47px;
+            height: 47px;
+            border-radius: 50%;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 1;
+            background-color: #000000;
+        }
         .main-content {
             flex: 1;
             padding: 20px;
@@ -171,7 +183,7 @@
             display: none;
             flex-shrink: 0;
         }
-        #log:not(:empty) {
+        #log.show-logs {
             display: block;
         }
         #video-section {
@@ -241,6 +253,16 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2">
                     <circle cx="12" cy="12" r="10"/>
                     <text x="12" y="16" text-anchor="middle" fill="black" font-size="12" font-weight="bold">AI</text>
+                </svg>
+            </button>
+            <button id="logsToggle" class="control-button" title="Show/Hide Logs">
+                <div class="logs-status"></div>
+                <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14,2 14,8 20,8"/>
+                    <line x1="16" y1="13" x2="8" y2="13"/>
+                    <line x1="16" y1="17" x2="8" y2="17"/>
+                    <polyline points="10,9 9,9 8,9"/>
                 </svg>
             </button>
         </div>
