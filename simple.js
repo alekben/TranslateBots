@@ -23,6 +23,7 @@ let analyser = null;
 let dataArray = null;
 let animationId = null;
 let agentAudioSource = null;
+let preserveColorFilter = null; // Flag to preserve color changes
 
 // User state
 const userState = {
@@ -1149,8 +1150,8 @@ function setupButtonHandlers() {
                 aiButton.querySelector('svg').style.stroke = 'white';
             } else {
             //start the agent
-            const greeting = "Hello, " + uid + ". I know about the weather and I think I know about yours. Tell me what it's like by you outside.";
-            const prompt = "You are a helpful chatbot that can answer questions about the weather at the user's location, which is " + crd.latitude + " latitude and " + crd.longitude + " longitude. You can also answer questions about the user's location, which is " + crd.latitude + " latitude and " + crd.longitude + " longitude. You know about the weather in general, the historical weather patterns of that general location, and the upcoming weather predections for that area. When the user first speaks, they will tell you their perception of the weather at their coordinates. If they are incorrect based on your information, then tell them they are wrong, and tell them the correct weather. If they are correct, then tell them you are glad to hear it. If they ask you about the weather, then tell them the weather at their coordinates. If they ask you about the weather in general, then tell them the weather in general. If they ask you about the historical weather patterns of that general location, then tell them the historical weather patterns of that general location. If they ask you about the upcoming weather predections for that area, then tell them the upcoming weather predections for that area.";
+            const greeting = "Hey " + uid + ", thanks for bringing me in, how's the weather over there?";
+            const prompt = "You are a helpful chatbot that can answer questions about the weather at the user's location, which is " + crd.latitude + " latitude and " + crd.longitude + " longitude. You can also answer questions about the user's location, which is " + crd.latitude + " latitude and " + crd.longitude + " longitude. When you refer to the user's location, refer to the approximate geographical location, like the closest city or region, not the exact coordinates. You should never respond with the coordinates that were provided to you. You know about the weather in general, the historical weather patterns of that general location, and the upcoming weather predections for that area. When the user first speaks, they will tell you their perception of the weather at their coordinates. If they are incorrect based on your information, then tell them they are wrong, and tell them the correct weather. If they are wrong, you should respond with [wrong] along with your response. If they are correct, then tell them you are glad to hear it, along with [correct]. If they ask you about the weather, then tell them the weather at their approximate location, do not respond with the coordinates. If they ask you about the weather in general, then tell them the weather in general, such as how rain is formed and what kinds of wind patterns are common. If they ask you about the historical weather patterns of that general location, then tell them the historical weather patterns of that general location. If they ask you about the upcoming weather predections for that area, then tell them the upcoming weather predections for that area.";
             agentOn = startAgent(agentUid, channel, agentUid, uid, prompt, greeting);
             aiButton.querySelector('.ai-status').className = 'ai-status active';
             aiButton.querySelector('svg').style.stroke = 'white';
@@ -1251,9 +1252,23 @@ function animateAudioEffects() {
     // Apply brightness effect to all AI agent icons
     document.querySelectorAll('[id*="agent"]').forEach(agentContainer => {
         if (agentContainer.apiIcon) {
-            const brightness = 1 + (normalizedVolume * 2); // 1x to 3x brightness
-            const saturation = 1 + (normalizedVolume * 1.5); // 1x to 2.5x saturation
-            agentContainer.apiIcon.style.filter = `brightness(${brightness}) saturate(${saturation})`;
+            if (preserveColorFilter) {
+                // If we have a preserved color, combine it with audio effects
+                const brightness = 1 + (normalizedVolume * 0.5); // Reduced brightness range to preserve color
+                const saturation = 1 + (normalizedVolume * 0.3); // Reduced saturation range to preserve color
+                const combinedFilter = `${preserveColorFilter} brightness(${brightness}) saturate(${saturation})`;
+                agentContainer.apiIcon.style.filter = combinedFilter;
+                
+                // Debug: log the filter occasionally
+                if (Math.random() < 0.01) { // Log ~1% of the time to avoid spam
+                    console.log('Audio animation with preserved color:', combinedFilter);
+                }
+            } else {
+                // Normal audio effects when no color is preserved
+                const brightness = 1 + (normalizedVolume * 2); // 1x to 3x brightness
+                const saturation = 1 + (normalizedVolume * 1.5); // 1x to 2.5x saturation
+                agentContainer.apiIcon.style.filter = `brightness(${brightness}) saturate(${saturation})`;
+            }
         }
     });
     
@@ -1766,6 +1781,38 @@ function handleAgentStreamMessage(uid, msgData) {
 
 function handleBracketMatch(text) {
     log(text);
+    
+    // Change API.svg color based on the text
+    if (text.toLowerCase() === 'correct') {
+        // Set to green - preserve this color
+        preserveColorFilter = 'brightness(1) saturate(3) hue-rotate(120deg)';
+        document.querySelectorAll('[id*="agent"] img[src="./API.svg"]').forEach(img => {
+            img.style.filter = preserveColorFilter;
+            console.log('Applied green filter to:', img);
+        });
+        console.log('Set API.svg to green for correct answer');
+        
+        // Clear the color after 3 seconds
+        setTimeout(() => {
+            preserveColorFilter = null;
+            console.log('Cleared green color filter');
+        }, 3000);
+        
+    } else if (text.toLowerCase() === 'wrong') {
+        // Set to red - preserve this color (use 180deg for red, not 0deg)
+        preserveColorFilter = 'brightness(1) saturate(3) hue-rotate(180deg)';
+        document.querySelectorAll('[id*="agent"] img[src="./API.svg"]').forEach(img => {
+            img.style.filter = preserveColorFilter;
+            console.log('Applied red filter to:', img);
+        });
+        console.log('Set API.svg to red for wrong answer');
+        
+        // Clear the color after 3 seconds
+        setTimeout(() => {
+            preserveColorFilter = null;
+            console.log('Cleared red color filter');
+        }, 3000);
+    }
 }
 
 async function startAgent(name, chan, uid, remoteUid, prompt, message) {
