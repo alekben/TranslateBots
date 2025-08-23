@@ -1207,7 +1207,6 @@ function startAudioAnalysis(audioTrack) {
         if (mediaStreamTrack) {
             agentAudioSource = audioContext.createMediaStreamSource(new MediaStream([mediaStreamTrack]));
             agentAudioSource.connect(analyser);
-            analyser.connect(audioContext.destination);
             
             // Start the animation loop
             animateAudioEffects();
