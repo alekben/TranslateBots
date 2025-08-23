@@ -1784,8 +1784,8 @@ function handleBracketMatch(text) {
     
     // Change API.svg color based on the text
     if (text.toLowerCase() === 'correct') {
-        // Set to green - preserve this color
-        preserveColorFilter = 'brightness(1) saturate(3) hue-rotate(120deg)';
+        // Set to green - preserve this color (use -120deg to go from blue to green)
+        preserveColorFilter = 'brightness(1) saturate(3) hue-rotate(-120deg)';
         document.querySelectorAll('[id*="agent"] img[src="./API.svg"]').forEach(img => {
             img.style.filter = preserveColorFilter;
             console.log('Applied green filter to:', img);
