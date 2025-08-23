@@ -39,6 +39,9 @@ let uid = ""; // User ID
 // Track users in the channel, their UID, mic/cam states, join order, and metadata
 let usersInChannel = [];
 
+//agent transcript business
+const messagesMap = new Map();
+
 // --- Share Link Modal Logic ---
 let isShareModalOpen = false;
 
@@ -171,6 +174,9 @@ function initializeClient() {
 
 // Handle client events
 function setupEventListeners() {
+
+    client.on("stream-message", handleAgentStreamMessage);
+
     client.on("user-joined", async (user) => {
         if (user.uid.includes("agent")) {
             console.log(`Agent ${user.uid} joined channel`);
@@ -1167,7 +1173,7 @@ function setupButtonHandlers() {
                     logDiv.classList.remove('show-logs');
                     logsToggleButton.querySelector('svg').style.stroke = 'white';
                 } else {
-                    logsToggleButton.classList.add('show-logs');
+                    logDiv.classList.add('show-logs');
                     logsToggleButton.querySelector('svg').style.stroke = '#00c2ff';
                 }
             }
@@ -1725,6 +1731,43 @@ function handleUrlParameters() {
 window.addEventListener('DOMContentLoaded', handleUrlParameters);
 
 // ConvoAI functions
+
+//handle datastream messages from agent
+
+function handleAgentStreamMessage(uid, msgData) {
+    // Only handle messages from the agent
+    if (uid === (agentUid)) {
+        try {
+            let [messageId, messagePart, messageChunks, messageData] = new TextDecoder().decode(msgData).split("|");
+            messageData = atob(messageData);
+            messagesMap.set(messageId, messagesMap.get(messageId) ? messagesMap.get(messageId) + messageData : messageData);
+
+            messageData = messagesMap.get(messageId);
+            if (parseInt(messagePart) === parseInt(messageChunks))
+                messagesMap.delete(messageId);
+            else return;
+
+            const messageDataJson = JSON.parse(messageData);
+            //console.log("messageDataJson", messageDataJson);
+            if (messageDataJson.object === "assistant.transcription") {
+                //this is agent transcript
+                if (!messageDataJson?.turn_status) return;
+                console.log("Agent message:", messageDataJson.text);
+                log(`Agent: ${messageDataJson.text}`);
+                const match = messageDataJson.text.match(/\[([^\]]+)\]/);
+                if (match) {
+                    handleBracketMatch(match[1]);
+                } 
+            } 
+        } catch (error) {
+          console.log("Error processing Agent message:", error);
+        }
+      }
+    };
+
+function handleBracketMatch(text) {
+    log(text);
+}
 
 async function startAgent(name, chan, uid, remoteUid, prompt, message) {
     // joinAgent deployed on Lambda
