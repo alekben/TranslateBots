@@ -1762,7 +1762,7 @@ function handleAgentStreamMessage(uid, msgData) {
             else return;
 
             const messageDataJson = JSON.parse(messageData);
-            //console.log("messageDataJson", messageDataJson);
+            console.log("messageDataJson", messageDataJson);
             if (messageDataJson.object === "assistant.transcription") {
                 //this is agent transcript
                 if (!messageDataJson?.turn_status) return;
@@ -1772,7 +1772,10 @@ function handleAgentStreamMessage(uid, msgData) {
                 if (match) {
                     handleBracketMatch(match[1]);
                 } 
-            } 
+            } else {
+                console.log(`User message [${uid}]: ${messageDataJson.text}`);
+                log(`${uid} said: ${messageDataJson.text}`);
+            }
         } catch (error) {
           console.log("Error processing Agent message:", error);
         }
