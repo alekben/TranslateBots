@@ -210,6 +210,57 @@
             object-fit: contain;
             display: block;
         }
+        #usernameModal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        #usernameModalContent {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            text-align: center;
+            min-width: 300px;
+        }
+        #usernameModalContent h2 {
+            margin: 0 0 20px 0;
+            color: #333;
+            font-size: 24px;
+        }
+        #usernameModalContent input {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+        #usernameModalContent input:focus {
+            outline: none;
+            border-color: #00c2ff;
+        }
+        #usernameModalContent button {
+            background: #00c2ff;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        #usernameModalContent button:hover {
+            background: #0099cc;
+        }
     </style>
 </head>
 <body>
@@ -362,5 +413,15 @@
         }
     });
     </script>
+
+    <!-- Username Modal -->
+    <div id="usernameModal">
+        <div id="usernameModalContent">
+            <h2>Enter Username</h2>
+            <input type="text" id="usernameInput" placeholder="Enter your username" maxlength="20">
+            <br>
+            <button id="usernameJoinButton">Join</button>
+        </div>
+    </div>
 </body>
 </html>

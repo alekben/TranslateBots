@@ -325,7 +325,10 @@ function updateButtonStates() {
     }
 
     // Update AI button state
-    if (!isJoined) {
+    const appId = document.getElementById('appId').value;
+    const isAllowedAppId = appId === 'a9a4b25e4e8b4a558aa39780d1a84342';
+    
+    if (!isJoined || !isAllowedAppId) {
         aiButton.disabled = true;
         aiStatus.className = 'ai-status not-joined';
         aiIcon.style.stroke = 'black';
@@ -1403,7 +1406,10 @@ async function joinChannel() {
         channel = channelInput || generateRandomChannel(5);
         uid = uidInput || generateRandomUID(5);
         agentUid = generateRandomUID(5) + "agent";
-        document.getElementById('uid').value = uid;
+        // Only update the UID field if it's empty (to preserve user-provided username)
+        if (!uidInput) {
+            document.getElementById('uid').value = uid;
+        }
         log(`Using channel name: ${channel}`);
 
         //create local tracks next
@@ -1714,6 +1720,10 @@ function handleUrlParameters() {
     const urlParams = new URLSearchParams(window.location.search);
     const appId = urlParams.get('appid');
     const channelName = urlParams.get('channel');
+    const username = urlParams.get('username');
+
+    // Check if we have query parameters (indicating this was opened via share link)
+    const hasQueryParams = appId || channelName || username;
 
     // Populate App ID if present
     if (appId) {
@@ -1729,15 +1739,61 @@ function handleUrlParameters() {
         channelInput.value = channelName;
     }
 
-    // If both parameters are present, trigger join
-    if (appId && channelName) {
-        // Use setTimeout to ensure the page is fully loaded
+    // If we have query parameters, show username modal
+    if (hasQueryParams) {
+        showUsernameModal(username);
+    }
+}
+
+// Function to show username modal
+function showUsernameModal(presetUsername = '') {
+    const modal = document.getElementById('usernameModal');
+    const usernameInput = document.getElementById('usernameInput');
+    const joinButton = document.getElementById('usernameJoinButton');
+    
+    if (modal && usernameInput && joinButton) {
+        // Set preset username if provided
+        if (presetUsername) {
+            usernameInput.value = presetUsername;
+        }
+        
+        // Show modal
+        modal.style.display = 'flex';
+        
+        // Focus on input
         setTimeout(() => {
-            const joinButton = document.getElementById('join');
-            if (!joinButton.disabled) {
+            usernameInput.focus();
+        }, 100);
+        
+        // Handle join button click
+        joinButton.onclick = () => {
+            const username = usernameInput.value.trim();
+            if (username) {
+                // Set the username in the UID field
+                const uidInput = document.getElementById('uid');
+                if (uidInput) {
+                    uidInput.value = username;
+                }
+                
+                // Close modal
+                modal.style.display = 'none';
+                
+                // Trigger join
+                setTimeout(() => {
+                    const joinButton = document.getElementById('join');
+                    if (!joinButton.disabled) {
+                        joinButton.click();
+                    }
+                }, 100);
+            }
+        };
+        
+        // Handle Enter key in input
+        usernameInput.onkeypress = (e) => {
+            if (e.key === 'Enter') {
                 joinButton.click();
             }
-        }, 100);
+        };
     }
 }
 
