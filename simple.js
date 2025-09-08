@@ -1214,7 +1214,7 @@ function setupButtonHandlers() {
             const prompt = "Input will be in English, repeat back translated to Russian.";
             const agentName = uid + "-" + channel + "-agent";
             const finalAgentUid = agentUid + "-en-US" + "-ru-RU";
-            agentOn = startAgent(agentName, channel, finalAgentUid, uid, prompt, greeting, 'ru-RU');
+            agentOn = startAgent(agentName, channel, finalAgentUid, uid, prompt, greeting, 'en-US');
             aiButton.querySelector('.ai-status').className = 'ai-status active';
             aiButton.querySelector('svg').style.stroke = 'white';
             }
