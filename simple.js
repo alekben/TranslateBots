@@ -182,7 +182,7 @@ function setupEventListeners() {
         if (user.uid.includes("agent")) {
             console.log(`Agent ${user.uid} joined channel`);
             log(`Agent ${user.uid} joined channel`);
-            const agentMetadata = user.uid.split('-', 1)[0] + "'s AI";
+            const agentMetadata = user.uid.split('-')[0] + " from " + user.uid.split('-')[2] + " to " + user.uid.split('-')[5];
             usersInChannel.push({
                 uid: user.uid,
                 mic: 'unmuted',
@@ -774,8 +774,8 @@ function displayRemoteUser(user) {
         
         // Create a div for the user ID text
         const uidText = document.createElement("div");
-        const agentMetadata = user.uid.split('-', 1)[0];
-        uidText.textContent = `${agentMetadata}'s AI`;
+        const agentMetadata = user.uid.split('-')[0] + "'s " + user.uid.split('-')[1] + " to " + user.uid.split('-')[2] + " translator";
+        uidText.textContent = agentMetadata;
         uidText.style.position = "absolute";
         uidText.style.bottom = "20px";
         uidText.style.left = "20px";
@@ -1210,10 +1210,11 @@ function setupButtonHandlers() {
                 aiButton.querySelector('svg').style.stroke = 'white';
             } else {
             //start the agent
-            const greeting = "Hey " + uid + ", thanks for bringing me in, how's the weather over there?";
-            const prompt = "You are a helpful chatbot that can answer questions about the weather at the user's location, which is " + crd.latitude + " latitude and " + crd.longitude + " longitude. You can also answer questions about the user's location, which is " + crd.latitude + " latitude and " + crd.longitude + " longitude. When you refer to the user's location, refer to the approximate geographical location, like the closest city or region, not the exact coordinates. You should never respond with the coordinates that were provided to you. You know about the weather in general, the historical weather patterns of that general location, and the upcoming weather predections for that area. When the user first speaks, they will tell you their perception of the weather at their coordinates. If they are incorrect based on your information, then tell them they are wrong, and tell them the correct weather. If they are wrong, you should respond with [wrong] along with your response. If they are correct, then tell them you are glad to hear it, along with [correct]. If they ask you about the weather, then tell them the weather at their approximate location, do not respond with the coordinates. If they ask you about the weather in general, then tell them the weather in general, such as how rain is formed and what kinds of wind patterns are common. If they ask you about the historical weather patterns of that general location, then tell them the historical weather patterns of that general location. If they ask you about the upcoming weather predections for that area, then tell them the upcoming weather predections for that area.";
+            const greeting = "-";
+            const prompt = "Input will be in English, repeat back translated to Russian.";
             const agentName = uid + "-" + channel + "-agent";
-            agentOn = startAgent(agentName, channel, agentUid, uid, prompt, greeting);
+            const finalAgentUid = agentUid + "-en-US" + "-ru-RU";
+            agentOn = startAgent(agentName, channel, finalAgentUid, uid, prompt, greeting, 'ru-RU');
             aiButton.querySelector('.ai-status').className = 'ai-status active';
             aiButton.querySelector('svg').style.stroke = 'white';
             }
@@ -1937,9 +1938,9 @@ function handleBracketMatch(text) {
     }
 }
 
-async function startAgent(name, chan, uid, remoteUid, prompt, message) {
+async function startAgent(name, chan, uid, remoteUid, prompt, message, inputlanguage = 'en-US') {
     // joinAgent deployed on Lambda
-    const url = "https://fcnfih4dgp6sysnjl4ywyazkze0gwvhg.lambda-url.us-east-2.on.aws";
+    const url = "https://3znewph5vclqtr6f4agviwj6vq0cfatg.lambda-url.us-east-2.on.aws";
     
     const headers = {
       "X-Requested-With": "XMLHttpRequest",
@@ -1954,7 +1955,8 @@ async function startAgent(name, chan, uid, remoteUid, prompt, message) {
       agentuid: uid,
       remoteuid: remoteUid,
       prompt: prompt,
-      message: message
+      message: message,
+      inputlanguage: inputlanguage
     };
 
     try {
