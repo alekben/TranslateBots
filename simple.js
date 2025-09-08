@@ -16,6 +16,7 @@ let myAgentsId = null;
 let agentUid = null;
 let crd = null; // Geolocation
 let agentOn = false;
+let unsubcribeList = [];
 
 // Audio analysis variables for AI agent effects
 let audioContext = null;
@@ -219,6 +220,14 @@ function setupEventListeners() {
         
         // Update local video position after remote user leaves
         updateLocalVideoPosition();
+
+        if (user.uid.includes("agent")) {
+            const agentSourceUid = user.uid.split('-')[0];
+            if (unsubcribeList.includes(agentSourceUid)) {
+                unsubcribeList.splice(unsubcribeList.indexOf(agentSourceUid), 1);
+            }
+            processUnsubcribeList();
+        }
     });
 
     client.on("user-published", async (user, mediaType) => {
@@ -744,6 +753,28 @@ function updateLocalVideoCameraIcon() {
     micIconContainer.style.display = showMic ? "block" : "none";
 }
 
+function processUnsubcribeList() {
+    // Unsubscribe from users in the unsubscribe list (except self)
+    unsubcribeList.forEach(unsubscribeUid => {
+        if (unsubscribeUid !== uid) {
+            client.unsubscribe(unsubscribeUid, "audio");
+        }
+    });
+    
+    // Subscribe to users who should be subscribed (not in unsubscribe list, have mic unmuted, and are not self)
+    if (usersInChannel) {
+        usersInChannel.forEach(user => {
+            const userUid = user.uid;
+            const isUnmuted = user.mic === 'unmuted';
+            const isNotInUnsubscribeList = !unsubcribeList.includes(userUid);
+            const isNotSelf = userUid !== uid;
+            
+            if (isUnmuted && isNotInUnsubscribeList && isNotSelf) {
+                client.subscribe(userUid, "audio");
+            }
+        });
+    }
+}
 // Display remote video
 function displayRemoteUser(user) {
     const remotePlayerContainer = document.createElement("div");
@@ -777,6 +808,12 @@ function displayRemoteUser(user) {
         const inputLanguage = user.uid.split('-')[2].toUpperCase();
         const outputLanguage = user.uid.split('-')[4].toUpperCase();
         const agentMetadata = user.uid.split('-')[0] + "'s Translator: " + inputLanguage + " to " + outputLanguage;
+        // Handle unsubcribe list logic here, good place as any
+        const agentSourceUid = user.uid.split('-')[0];
+        if (!unsubcribeList.includes(agentSourceUid)) {
+            unsubcribeList.push(agentSourceUid);
+            processUnsubcribeList();
+        };
         uidText.textContent = agentMetadata;
         uidText.style.position = "absolute";
         uidText.style.bottom = "20px";
@@ -1303,64 +1340,50 @@ function setupButtonHandlers() {
         };
     }
 
-    // Add modal event listeners
-    document.addEventListener('DOMContentLoaded', function() {
-        // Language dropdown change listeners
-        const inputLanguageSelect = document.getElementById('inputLanguage');
-        const outputLanguageSelect = document.getElementById('outputLanguage');
-        
-        if (inputLanguageSelect) {
-            inputLanguageSelect.addEventListener('change', updateStartButtonState);
-        }
-        
-        if (outputLanguageSelect) {
-            outputLanguageSelect.addEventListener('change', updateStartButtonState);
-        }
-
+    // Add modal event listeners - using event delegation for dynamic elements
+    document.addEventListener('click', function(e) {
         // Start Agent button
-        const startAgentButton = document.getElementById('startAgentButton');
-        if (startAgentButton) {
-            startAgentButton.addEventListener('click', function() {
-                const inputLanguage = document.getElementById('inputLanguage').value;
-                const outputLanguage = document.getElementById('outputLanguage').value;
+        if (e.target && e.target.id === 'startAgentButton') {
+            const inputLanguage = document.getElementById('inputLanguage').value;
+            const outputLanguage = document.getElementById('outputLanguage').value;
+            
+            if (inputLanguage && outputLanguage) {
+                // Get random voice for output language
+                const voice = getRandomVoiceForLanguage(outputLanguage);
                 
-                if (inputLanguage && outputLanguage) {
-                    // Get random voice for output language
-                    const voice = getRandomVoiceForLanguage(outputLanguage);
-                    
-                    // Start the agent with selected languages
-                    const greeting = "-";
-                    const prompt = `Input will be in ${inputLanguage}, repeat back translated to ${outputLanguage}.`;
-                    const agentName = uid + "-" + channel + "-agent";
-                    const finalAgentUid = agentUid + "-" + inputLanguage + "-" + outputLanguage;
-                    
-                    agentOn = startAgent(agentName, channel, finalAgentUid, uid, prompt, greeting, inputLanguage, voice);
-                    
-                    // Update UI
-                    const aiButton = document.getElementById('aiButton');
-                    aiButton.querySelector('.ai-status').className = 'ai-status active';
-                    aiButton.querySelector('svg').style.stroke = 'white';
-                    
-                    // Hide modal
-                    hideLanguageModal();
-                }
-            });
+                // Start the agent with selected languages
+                const greeting = "-";
+                const prompt = `You are a translation bot, you do not respond to ANYTHING that the user says besides just repeating back what was stated in the translated languages that are specified. The input language from the user will be in ${inputLanguage}. You will translate and repeat back in ${outputLanguage}.`;
+                const agentName = uid + "-" + channel + "-agent";
+                const finalAgentUid = agentUid + "-" + inputLanguage + "-" + outputLanguage;
+                
+                agentOn = startAgent(agentName, channel, finalAgentUid, uid, prompt, greeting, inputLanguage, voice);
+                
+                // Update UI
+                const aiButton = document.getElementById('aiButton');
+                aiButton.querySelector('.ai-status').className = 'ai-status active';
+                aiButton.querySelector('svg').style.stroke = 'white';
+                
+                // Hide modal
+                hideLanguageModal();
+            }
         }
-
+        
         // Cancel button
-        const cancelButton = document.getElementById('cancelLanguageButton');
-        if (cancelButton) {
-            cancelButton.addEventListener('click', hideLanguageModal);
+        if (e.target && e.target.id === 'cancelLanguageButton') {
+            hideLanguageModal();
         }
-
+        
         // Close modal when clicking outside
-        const languageModal = document.getElementById('languageModal');
-        if (languageModal) {
-            languageModal.addEventListener('click', function(e) {
-                if (e.target === languageModal) {
-                    hideLanguageModal();
-                }
-            });
+        if (e.target && e.target.id === 'languageModal') {
+            hideLanguageModal();
+        }
+    });
+
+    // Add change listeners for dropdowns
+    document.addEventListener('change', function(e) {
+        if (e.target && (e.target.id === 'inputLanguage' || e.target.id === 'outputLanguage')) {
+            updateStartButtonState();
         }
     });
 
