@@ -774,7 +774,9 @@ function displayRemoteUser(user) {
         
         // Create a div for the user ID text
         const uidText = document.createElement("div");
-        const agentMetadata = user.uid.split('-')[0] + "'s " + user.uid.split('-')[1] + " to " + user.uid.split('-')[2] + " translator";
+        const inputLanguage = user.uid.split('-')[2].toUpperCase();
+        const outputLanguage = user.uid.split('-')[4].toUpperCase();
+        const agentMetadata = user.uid.split('-')[0] + "'s Translator: " + inputLanguage + " to " + outputLanguage;
         uidText.textContent = agentMetadata;
         uidText.style.position = "absolute";
         uidText.style.bottom = "20px";
