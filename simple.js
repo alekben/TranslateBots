@@ -1199,6 +1199,92 @@ function setupButtonHandlers() {
         }
     });
 
+    // Language Selection Modal Functions
+    function populateLanguageDropdowns() {
+        const inputSelect = document.getElementById('inputLanguage');
+        const outputSelect = document.getElementById('outputLanguage');
+        
+        // Clear existing options except the first one
+        inputSelect.innerHTML = '<option value="">Select Input Language</option>';
+        outputSelect.innerHTML = '<option value="">Select Output Language</option>';
+        
+        // Populate both dropdowns with available languages from msVoice.js
+        Object.keys(window.microsoftVoicesByLang).forEach(language => {
+            // Extract language code from the language name (e.g., "German (Germany)" -> "de-DE")
+            const languageCode = extractLanguageCode(language);
+            
+            const inputOption = document.createElement('option');
+            inputOption.value = languageCode;
+            inputOption.textContent = language;
+            inputSelect.appendChild(inputOption);
+            
+            const outputOption = document.createElement('option');
+            outputOption.value = languageCode;
+            outputOption.textContent = language;
+            outputSelect.appendChild(outputOption);
+        });
+    }
+
+    function extractLanguageCode(languageName) {
+        // Map language names to their codes based on the msVoice.js structure
+        const languageMap = {
+            "German (Germany)": "de-DE",
+            "English (United Kingdom)": "en-GB", 
+            "English (United States)": "en-US",
+            "Spanish (Spain)": "es-ES",
+            "French (France)": "fr-FR",
+            "Italian (Italy)": "it-IT",
+            "Japanese (Japan)": "ja-JP",
+            "Korean (Korea)": "ko-KR",
+            "Portuguese (Brazil)": "pt-BR",
+            "Chinese (Mandarin, Simplified)": "zh-CN"
+        };
+        return languageMap[languageName] || languageName;
+    }
+
+    function getRandomVoiceForLanguage(languageCode) {
+        // Find the language name that matches the code
+        const languageName = Object.keys(window.microsoftVoicesByLang).find(name => 
+            extractLanguageCode(name) === languageCode
+        );
+        
+        if (languageName && window.microsoftVoicesByLang[languageName]) {
+            const voices = window.microsoftVoicesByLang[languageName];
+            const randomIndex = Math.floor(Math.random() * voices.length);
+            return voices[randomIndex].shortName;
+        }
+        return "en-US-AndrewMultilingualNeural"; // fallback
+    }
+
+    function showLanguageModal() {
+        const modal = document.getElementById('languageModal');
+        const startButton = document.getElementById('startAgentButton');
+        
+        // Reset form
+        document.getElementById('inputLanguage').value = '';
+        document.getElementById('outputLanguage').value = '';
+        startButton.disabled = true;
+        
+        // Show modal
+        modal.style.display = 'block';
+        
+        // Populate dropdowns
+        populateLanguageDropdowns();
+    }
+
+    function hideLanguageModal() {
+        const modal = document.getElementById('languageModal');
+        modal.style.display = 'none';
+    }
+
+    function updateStartButtonState() {
+        const inputLanguage = document.getElementById('inputLanguage').value;
+        const outputLanguage = document.getElementById('outputLanguage').value;
+        const startButton = document.getElementById('startAgentButton');
+        
+        startButton.disabled = !inputLanguage || !outputLanguage;
+    }
+
     // Add AI button click handler
     const aiButton = document.getElementById('aiButton');
     if (aiButton) {
@@ -1211,17 +1297,72 @@ function setupButtonHandlers() {
                 aiButton.querySelector('.ai-status').className = 'ai-status joined';
                 aiButton.querySelector('svg').style.stroke = 'white';
             } else {
-            //start the agent
-            const greeting = "-";
-            const prompt = "Input will be in English, repeat back translated to Russian.";
-            const agentName = uid + "-" + channel + "-agent";
-            const finalAgentUid = agentUid + "-en-US" + "-ru-RU";
-            agentOn = startAgent(agentName, channel, finalAgentUid, uid, prompt, greeting, 'en-US');
-            aiButton.querySelector('.ai-status').className = 'ai-status active';
-            aiButton.querySelector('svg').style.stroke = 'white';
+                //show language selection modal
+                showLanguageModal();
             }
         };
     }
+
+    // Add modal event listeners
+    document.addEventListener('DOMContentLoaded', function() {
+        // Language dropdown change listeners
+        const inputLanguageSelect = document.getElementById('inputLanguage');
+        const outputLanguageSelect = document.getElementById('outputLanguage');
+        
+        if (inputLanguageSelect) {
+            inputLanguageSelect.addEventListener('change', updateStartButtonState);
+        }
+        
+        if (outputLanguageSelect) {
+            outputLanguageSelect.addEventListener('change', updateStartButtonState);
+        }
+
+        // Start Agent button
+        const startAgentButton = document.getElementById('startAgentButton');
+        if (startAgentButton) {
+            startAgentButton.addEventListener('click', function() {
+                const inputLanguage = document.getElementById('inputLanguage').value;
+                const outputLanguage = document.getElementById('outputLanguage').value;
+                
+                if (inputLanguage && outputLanguage) {
+                    // Get random voice for output language
+                    const voice = getRandomVoiceForLanguage(outputLanguage);
+                    
+                    // Start the agent with selected languages
+                    const greeting = "-";
+                    const prompt = `Input will be in ${inputLanguage}, repeat back translated to ${outputLanguage}.`;
+                    const agentName = uid + "-" + channel + "-agent";
+                    const finalAgentUid = agentUid + "-" + inputLanguage + "-" + outputLanguage;
+                    
+                    agentOn = startAgent(agentName, channel, finalAgentUid, uid, prompt, greeting, inputLanguage, voice);
+                    
+                    // Update UI
+                    const aiButton = document.getElementById('aiButton');
+                    aiButton.querySelector('.ai-status').className = 'ai-status active';
+                    aiButton.querySelector('svg').style.stroke = 'white';
+                    
+                    // Hide modal
+                    hideLanguageModal();
+                }
+            });
+        }
+
+        // Cancel button
+        const cancelButton = document.getElementById('cancelLanguageButton');
+        if (cancelButton) {
+            cancelButton.addEventListener('click', hideLanguageModal);
+        }
+
+        // Close modal when clicking outside
+        const languageModal = document.getElementById('languageModal');
+        if (languageModal) {
+            languageModal.addEventListener('click', function(e) {
+                if (e.target === languageModal) {
+                    hideLanguageModal();
+                }
+            });
+        }
+    });
 
     // Add logs toggle button click handler
     const logsToggleButton = document.getElementById('logsToggle');
@@ -1940,7 +2081,7 @@ function handleBracketMatch(text) {
     }
 }
 
-async function startAgent(name, chan, uid, remoteUid, prompt, message, inputlanguage = 'en-US') {
+async function startAgent(name, chan, uid, remoteUid, prompt, message, inputlanguage = 'en-US', voice = 'en-US-AndrewMultilingualNeural') {
     // joinAgent deployed on Lambda
     const url = "https://3znewph5vclqtr6f4agviwj6vq0cfatg.lambda-url.us-east-2.on.aws";
     
@@ -1958,7 +2099,8 @@ async function startAgent(name, chan, uid, remoteUid, prompt, message, inputlang
       remoteuid: remoteUid,
       prompt: prompt,
       message: message,
-      inputlanguage: inputlanguage
+      inputlanguage: inputlanguage,
+      voice: voice
     };
 
     try {

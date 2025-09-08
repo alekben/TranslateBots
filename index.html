@@ -264,6 +264,116 @@
         #usernameModalContent button:hover {
             background: #0099cc;
         }
+
+        /* Language Selection Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 2000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(5px);
+        }
+
+        .modal-content {
+            background-color: #1a1a1a;
+            margin: 10% auto;
+            padding: 30px;
+            border: 2px solid #333;
+            border-radius: 15px;
+            width: 90%;
+            max-width: 500px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            color: white;
+        }
+
+        .modal-content h2 {
+            text-align: center;
+            margin-bottom: 25px;
+            color: #fff;
+            font-size: 24px;
+        }
+
+        .language-selection {
+            margin-bottom: 25px;
+        }
+
+        .language-group {
+            margin-bottom: 20px;
+        }
+
+        .language-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+            color: #ccc;
+        }
+
+        .language-group select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #444;
+            border-radius: 8px;
+            background-color: #2a2a2a;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        .language-group select:focus {
+            outline: none;
+            border-color: #0099cc;
+        }
+
+        .language-group select option {
+            background-color: #2a2a2a;
+            color: white;
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+        }
+
+        .start-button, .cancel-button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .start-button {
+            background-color: #0099cc;
+            color: white;
+        }
+
+        .start-button:hover {
+            background-color: #0077aa;
+            transform: translateY(-2px);
+        }
+
+        .start-button:disabled {
+            background-color: #555;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .cancel-button {
+            background-color: #666;
+            color: white;
+        }
+
+        .cancel-button:hover {
+            background-color: #888;
+            transform: translateY(-2px);
+        }
     </style>
 </head>
 <body>
@@ -357,6 +467,7 @@
     <div id="shareLinkModal" style="display:none; position:absolute; top:90px; left:80px; z-index:1000;"></div>
     <!-- Include the JavaScript file -->
     <script src="https://download.agora.io/sdk/release/AgoraRTC_N.js"></script>
+    <script src="./msVoice.js"></script>
     <script src="./simple.js"></script>
     <script>
     // Header animation logic
@@ -424,6 +535,31 @@
             <input type="text" id="usernameInput" placeholder="Enter your username" maxlength="20">
             <br>
             <button id="usernameJoinButton">Join</button>
+        </div>
+    </div>
+
+    <!-- Language Selection Modal -->
+    <div id="languageModal" class="modal">
+        <div class="modal-content">
+            <h2>Select Languages</h2>
+            <div class="language-selection">
+                <div class="language-group">
+                    <label for="inputLanguage">Input Language:</label>
+                    <select id="inputLanguage">
+                        <option value="">Select Input Language</option>
+                    </select>
+                </div>
+                <div class="language-group">
+                    <label for="outputLanguage">Output Language:</label>
+                    <select id="outputLanguage">
+                        <option value="">Select Output Language</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-buttons">
+                <button id="startAgentButton" class="start-button">Start Agent</button>
+                <button id="cancelLanguageButton" class="cancel-button">Cancel</button>
+            </div>
         </div>
     </div>
 </body>
