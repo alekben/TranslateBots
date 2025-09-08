@@ -182,11 +182,12 @@ function setupEventListeners() {
         if (user.uid.includes("agent")) {
             console.log(`Agent ${user.uid} joined channel`);
             log(`Agent ${user.uid} joined channel`);
+            const agentMetadata = user.uid.split('-', 1)[0] + "'s AI";
             usersInChannel.push({
                 uid: user.uid,
                 mic: 'unmuted',
                 cam: 'muted',
-                metadata: 'AIAgent'
+                metadata: agentMetadata
             });
             //in the future, display the ai agent in a different way that regular user
         } else {
@@ -298,6 +299,32 @@ function log(message, className = '') {
         logDiv.appendChild(messageDiv);
         logDiv.scrollTop = logDiv.scrollHeight;
     }
+}
+
+// Update AI agent transcript display
+function updateAgentTranscript(agentUid, transcriptText) {
+    const agentContainer = document.getElementById(agentUid);
+    if (!agentContainer || !agentContainer.transcriptDiv) {
+        console.log(`Agent container not found for UID: ${agentUid}`);
+        return;
+    }
+    
+    const transcriptDiv = agentContainer.transcriptDiv;
+    
+    // Clear existing timer if any
+    if (agentContainer.transcriptTimer) {
+        clearTimeout(agentContainer.transcriptTimer);
+    }
+    
+    // Update transcript text
+    transcriptDiv.textContent = transcriptText;
+    transcriptDiv.style.display = "block";
+    
+    // Set new timer to hide transcript after 10 seconds
+    agentContainer.transcriptTimer = setTimeout(() => {
+        transcriptDiv.style.display = "none";
+        agentContainer.transcriptTimer = null;
+    }, 10000);
 }
 
 // Update microphone and camera button states based on track availability and user state
@@ -747,7 +774,8 @@ function displayRemoteUser(user) {
         
         // Create a div for the user ID text
         const uidText = document.createElement("div");
-        uidText.textContent = `AgoraAI`;
+        const agentMetadata = user.uid.split('-', 1)[0];
+        uidText.textContent = `${agentMetadata}'s AI`;
         uidText.style.position = "absolute";
         uidText.style.bottom = "20px";
         uidText.style.left = "20px";
@@ -759,9 +787,34 @@ function displayRemoteUser(user) {
         uidText.style.backgroundColor = "rgba(0, 0, 0, 0.5)";
         uidText.style.borderRadius = "4px";
         
+        // Create a div for the transcript display
+        const transcriptDiv = document.createElement("div");
+        transcriptDiv.id = `transcript-${user.uid}`;
+        transcriptDiv.style.position = "absolute";
+        transcriptDiv.style.top = "5%";
+        transcriptDiv.style.left = "2.5%";
+        transcriptDiv.style.right = "2.5%";
+        transcriptDiv.style.color = "white";
+        transcriptDiv.style.fontSize = "32px";
+        transcriptDiv.style.textShadow = "2px 2px 4px rgba(0,0,0,0.8)";
+        transcriptDiv.style.zIndex = "3";
+        transcriptDiv.style.padding = "12px 16px";
+        transcriptDiv.style.backgroundColor = "rgba(0, 0, 0, 0.7)";
+        transcriptDiv.style.borderRadius = "8px";
+        transcriptDiv.style.maxHeight = "120px";
+        transcriptDiv.style.overflow = "hidden";
+        transcriptDiv.style.display = "none";
+        transcriptDiv.style.lineHeight = "1.4";
+        transcriptDiv.style.wordWrap = "break-word";
+        
+        // Store reference to the transcript div for easy access
+        remotePlayerContainer.transcriptDiv = transcriptDiv;
+        remotePlayerContainer.transcriptTimer = null;
+        
         document.getElementById('video-container').appendChild(remotePlayerContainer);
         remotePlayerContainer.appendChild(apiIcon);
         remotePlayerContainer.appendChild(uidText);
+        remotePlayerContainer.appendChild(transcriptDiv);
     } else {
         // Regular user styling - blue gradient background
         remotePlayerContainer.style.background = "#00C2FF";
@@ -1159,7 +1212,8 @@ function setupButtonHandlers() {
             //start the agent
             const greeting = "Hey " + uid + ", thanks for bringing me in, how's the weather over there?";
             const prompt = "You are a helpful chatbot that can answer questions about the weather at the user's location, which is " + crd.latitude + " latitude and " + crd.longitude + " longitude. You can also answer questions about the user's location, which is " + crd.latitude + " latitude and " + crd.longitude + " longitude. When you refer to the user's location, refer to the approximate geographical location, like the closest city or region, not the exact coordinates. You should never respond with the coordinates that were provided to you. You know about the weather in general, the historical weather patterns of that general location, and the upcoming weather predections for that area. When the user first speaks, they will tell you their perception of the weather at their coordinates. If they are incorrect based on your information, then tell them they are wrong, and tell them the correct weather. If they are wrong, you should respond with [wrong] along with your response. If they are correct, then tell them you are glad to hear it, along with [correct]. If they ask you about the weather, then tell them the weather at their approximate location, do not respond with the coordinates. If they ask you about the weather in general, then tell them the weather in general, such as how rain is formed and what kinds of wind patterns are common. If they ask you about the historical weather patterns of that general location, then tell them the historical weather patterns of that general location. If they ask you about the upcoming weather predections for that area, then tell them the upcoming weather predections for that area.";
-            agentOn = startAgent(agentUid, channel, agentUid, uid, prompt, greeting);
+            const agentName = uid + "-" + channel + "-agent";
+            agentOn = startAgent(agentName, channel, agentUid, uid, prompt, greeting);
             aiButton.querySelector('.ai-status').className = 'ai-status active';
             aiButton.querySelector('svg').style.stroke = 'white';
             }
@@ -1829,6 +1883,10 @@ function handleAgentStreamMessage(uid, msgData) {
                 if (!messageDataJson?.turn_status) return;
                 console.log("Agent message:", messageDataJson.text);
                 log(`${uid}: ${messageDataJson.text}`);
+                
+                // Update the AI agent's transcript display
+                updateAgentTranscript(uid, messageDataJson.text);
+                
                 const match = messageDataJson.text.match(/\[([^\]]+)\]/);
                 if (match) {
                     handleBracketMatch(match[1]);
