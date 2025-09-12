@@ -221,13 +221,6 @@ function setupEventListeners() {
         // Update local video position after remote user leaves
         updateLocalVideoPosition();
 
-        if (user.uid.includes("agent")) {
-            const agentSourceUid = user.uid.split('-')[0];
-            if (unsubcribeList.includes(agentSourceUid)) {
-                unsubcribeList.splice(unsubcribeList.indexOf(agentSourceUid), 1);
-            }
-            processUnsubcribeList();
-        }
     });
 
     client.on("user-published", async (user, mediaType) => {
@@ -255,6 +248,15 @@ function setupEventListeners() {
         }
         if (user.uid.includes("agent")) {
             console.log(`Agent ${user.uid} can speak.`);
+            // Handle unsubcribe list logic here, good place as any
+            const agentSourceUid = user.uid.split('-')[0];
+            if (agentSourceUid === uid) {
+                //this is my own agent, nothing to do
+                return;
+            } else {
+                //this is someone else's agent, so we need to unsub from the source uid
+                processUnsub(agentSourceUid);
+            };
         } else {
             updateRemotePlayerContainer(user.uid);
         }
@@ -275,6 +277,18 @@ function setupEventListeners() {
             console.log(`Agent ${user.uid} audio track unpublished, stopping audio analysis`);
             stopAudioAnalysis();
         }
+
+        //handle resub to source user here
+        if (user.uid.includes('agent')) {
+            const agentSourceUid = user.uid.split('-')[0];
+            if (agentSourceUid === uid) {
+                //this is my own agent, nothing to do
+                return;
+            } else {
+                //this is someone else's agent, so we need to unsub from the source uid
+                processSub(agentSourceUid);
+            };
+        };
         
         // let's update the remotePlayerContainer here, based on the state of usersInChannel values
         // This is only firing because either .cam or .mic is now 'muted' so we should show an icon at least
@@ -753,28 +767,30 @@ function updateLocalVideoCameraIcon() {
     micIconContainer.style.display = showMic ? "block" : "none";
 }
 
-function processUnsubcribeList() {
-    // Unsubscribe from users in the unsubscribe list (except self)
-    unsubcribeList.forEach(unsubscribeUid => {
-        if (unsubscribeUid !== uid) {
-            client.unsubscribe(unsubscribeUid, "audio");
-        }
-    });
-    
-    // Subscribe to users who should be subscribed (not in unsubscribe list, have mic unmuted, and are not self)
-    if (usersInChannel) {
-        usersInChannel.forEach(user => {
-            const userUid = user.uid;
-            const isUnmuted = user.mic === 'unmuted';
-            const isNotInUnsubscribeList = !unsubcribeList.includes(userUid);
-            const isNotSelf = userUid !== uid;
-            
-            if (isUnmuted && isNotInUnsubscribeList && isNotSelf) {
-                client.subscribe(userUid, "audio");
-            }
-        });
+function processUnsub(agentSourceUid) {
+    //push agent source uid to unsubcribe list
+    unsubcribeList.push(agentSourceUid);
+    console.log(unsubcribeList);
+    console.log(`Unsubscribing from ${agentSourceUid} due to Agent join`);
+    client.unsubscribe(agentSourceUid, "audio");
+};
+
+async function processSub(agentSourceUid) {
+    //remove agent source uid to unsubcribe list
+    unsubcribeList.splice(unsubcribeList.indexOf(agentSourceUid), 1);
+    console.log(unsubcribeList);
+    console.log(`Subscribing to ${agentSourceUid} due to Agent leave`);
+    await client.subscribe(agentSourceUid, "audio");
+    if (client.remoteUsers) {
+        let user = client.remoteUsers.find(u => u.uid === agentSourceUid);
+        if (user) {
+            user._audioTrack.play();
+        } else {
+            console.log(`User ${agentSourceUid} not found`);
+        };
     }
-}
+};
+
 // Display remote video
 function displayRemoteUser(user) {
     const remotePlayerContainer = document.createElement("div");
@@ -808,12 +824,7 @@ function displayRemoteUser(user) {
         const inputLanguage = user.uid.split('-')[2].toUpperCase();
         const outputLanguage = user.uid.split('-')[4].toUpperCase();
         const agentMetadata = user.uid.split('-')[0] + "'s Translator: " + inputLanguage + " to " + outputLanguage;
-        // Handle unsubcribe list logic here, good place as any
-        const agentSourceUid = user.uid.split('-')[0];
-        if (!unsubcribeList.includes(agentSourceUid)) {
-            unsubcribeList.push(agentSourceUid);
-            processUnsubcribeList();
-        };
+
         uidText.textContent = agentMetadata;
         uidText.style.position = "absolute";
         uidText.style.bottom = "20px";
@@ -1246,47 +1257,44 @@ function setupButtonHandlers() {
         outputSelect.innerHTML = '<option value="">Select Output Language</option>';
         
         // Populate both dropdowns with available languages from msVoice.js
-        Object.keys(window.microsoftVoicesByLang).forEach(language => {
-            // Extract language code from the language name (e.g., "German (Germany)" -> "de-DE")
-            const languageCode = extractLanguageCode(language);
+        Object.keys(window.microsoftVoicesByLang).forEach(languageCode => {
+            // Convert language code to display name (e.g., "de-DE" -> "German (Germany)")
+            const languageName = extractLanguageName(languageCode);
             
             const inputOption = document.createElement('option');
             inputOption.value = languageCode;
-            inputOption.textContent = language;
+            inputOption.textContent = languageName;
             inputSelect.appendChild(inputOption);
             
             const outputOption = document.createElement('option');
             outputOption.value = languageCode;
-            outputOption.textContent = language;
+            outputOption.textContent = languageName;
             outputSelect.appendChild(outputOption);
         });
     }
 
-    function extractLanguageCode(languageName) {
-        // Map language names to their codes based on the msVoice.js structure
+    function extractLanguageName(languageCode) {
+        // Map language codes to their display names
         const languageMap = {
-            "German (Germany)": "de-DE",
-            "English (United Kingdom)": "en-GB", 
-            "English (United States)": "en-US",
-            "Spanish (Spain)": "es-ES",
-            "French (France)": "fr-FR",
-            "Italian (Italy)": "it-IT",
-            "Japanese (Japan)": "ja-JP",
-            "Korean (Korea)": "ko-KR",
-            "Portuguese (Brazil)": "pt-BR",
-            "Chinese (Mandarin, Simplified)": "zh-CN"
+            "de-DE": "German (Germany)",
+            "en-GB": "English (United Kingdom)", 
+            "en-US": "English (United States)",
+            "es-ES": "Spanish (Spain)",
+            "fr-FR": "French (France)",
+            "it-IT": "Italian (Italy)",
+            "ja-JP": "Japanese (Japan)",
+            "ko-KR": "Korean (Korea)",
+            "pt-BR": "Portuguese (Brazil)",
+            "zh-CN": "Chinese (Mandarin, Simplified)",
+            "ru-RU": "Russian (Russia)"
         };
-        return languageMap[languageName] || languageName;
+        return languageMap[languageCode] || languageCode;
     }
 
     function getRandomVoiceForLanguage(languageCode) {
-        // Find the language name that matches the code
-        const languageName = Object.keys(window.microsoftVoicesByLang).find(name => 
-            extractLanguageCode(name) === languageCode
-        );
-        
-        if (languageName && window.microsoftVoicesByLang[languageName]) {
-            const voices = window.microsoftVoicesByLang[languageName];
+        // Check if the language code exists directly in the voices object
+        if (window.microsoftVoicesByLang[languageCode]) {
+            const voices = window.microsoftVoicesByLang[languageCode];
             const randomIndex = Math.floor(Math.random() * voices.length);
             return voices[randomIndex].shortName;
         }
@@ -1346,14 +1354,15 @@ function setupButtonHandlers() {
         if (e.target && e.target.id === 'startAgentButton') {
             const inputLanguage = document.getElementById('inputLanguage').value;
             const outputLanguage = document.getElementById('outputLanguage').value;
+            const simpleLanguage = document.getElementById('outputLanguage').selectedOptions[0].textContent.split(' ')[0];
             
             if (inputLanguage && outputLanguage) {
                 // Get random voice for output language
                 const voice = getRandomVoiceForLanguage(outputLanguage);
                 
                 // Start the agent with selected languages
-                const greeting = "-";
-                const prompt = `You are a translation bot, you do not respond to ANYTHING that the user says besides just repeating back what was stated in the translated languages that are specified. The input language from the user will be in ${inputLanguage}. You will translate and repeat back in ${outputLanguage}.`;
+                const greeting = "";
+                const prompt = `Repeat back in ${simpleLanguage}. Do not respond to anything else, just translate and repeat.`;
                 const agentName = uid + "-" + channel + "-agent";
                 const finalAgentUid = agentUid + "-" + inputLanguage + "-" + outputLanguage;
                 
