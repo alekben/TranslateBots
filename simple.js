@@ -2053,8 +2053,28 @@ function handleAgentStreamMessage(uid, msgData) {
             else return;
 
             const messageDataJson = JSON.parse(messageData);
-            console.log("messageDataJson", messageDataJson);
-            if (messageDataJson.object === "assistant.transcription") {
+
+            switch (messageDataJson.object) {
+            case "message.state":
+                console.log(`Agent ${uid} state: ${messageDataJson.state}`);
+                //handle agent state changes here
+                //1) If the speakerUid is my own, don't do anything
+                if (uid.split('-')[0] === agentUid.split('-')[0]) {
+                    console.log(`Agent ${uid} state: ${messageDataJson.state} - My own agent, do nothing`);
+                    return;
+                }
+                //2) Get state of agent
+                const agentState = messageDataJson.state;
+                //3) If the agentState is "speaking", set the localMicTrack volume to 0"
+                if (agentState === "speaking") {
+                    localAudioTrack.setVolume(0);
+                    console.log(`Agent ${uid} state: ${messageDataJson.state} - Setting local mic off`);
+                } else if (agentState === "silent") {
+                    localAudioTrack.setVolume(100);
+                    console.log(`Agent ${uid} state: ${messageDataJson.state} - Setting local mic on`);
+                }
+                break;
+            case "assistant.transcription":
                 //this is agent transcript
                 if (!messageDataJson?.turn_status) return;
                 console.log("Agent message:", messageDataJson.text);
@@ -2067,9 +2087,14 @@ function handleAgentStreamMessage(uid, msgData) {
                 if (match) {
                     handleBracketMatch(match[1]);
                 } 
-            } else if (messageDataJson.object === "user.transcription" && messageDataJson.final === true) {
+                break;
+            case "user.transcription":
+                if (messageDataJson.final === true) {
                 console.log(`${messageDataJson.user_id} message: ${messageDataJson.text}`);
                 log(`${messageDataJson.user_id}: ${messageDataJson.text}`, 'log-grey');
+                }
+            default:
+                break;
             }
         } catch (error) {
           console.log("Error processing Agent message:", error);
