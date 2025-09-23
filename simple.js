@@ -2068,16 +2068,26 @@ function handleAgentStreamMessage(uid, msgData) {
                 //3) If the agentState is "speaking", set the localMicTrack volume to 0"
                 if (agentState === "speaking") {
                     localAudioTrack.setVolume(0);
+                    // Add red outline to local player container
+                    const localPlayerContainer = document.getElementById(uid);
+                    if (localPlayerContainer) {
+                        localPlayerContainer.style.outline = "3px solid red";
+                    }
                     console.log(`Agent ${uid} state: ${messageDataJson.state} - Setting local mic off`);
                 } else if (agentState === "silent") {
                     localAudioTrack.setVolume(100);
+                    // Add green outline to local player container
+                    const localPlayerContainer = document.getElementById(uid);
+                    if (localPlayerContainer) {
+                        localPlayerContainer.style.outline = "3px solid green";
+                    }
                     console.log(`Agent ${uid} state: ${messageDataJson.state} - Setting local mic on`);
                 }
                 break;
             case "assistant.transcription":
                 //this is agent transcript
                 if (!messageDataJson?.turn_status) return;
-                console.log("Agent message:", messageDataJson.text);
+                console.log(`${uid} message: ${messageDataJson.text}`);
                 log(`${uid}: ${messageDataJson.text}`);
                 
                 // Update the AI agent's transcript display
