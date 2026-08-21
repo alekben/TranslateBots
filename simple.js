@@ -380,7 +380,7 @@ function updateButtonStates() {
 
     // Update AI button state
     const appId = document.getElementById('appId').value;
-    const isAllowedAppId = appId === 'a9a4b25e4e8b4a558aa39780d1a84342';
+    const isAllowedAppId = true;
     
     if (!isJoined || !isAllowedAppId) {
         aiButton.disabled = true;
