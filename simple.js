@@ -1362,7 +1362,7 @@ function setupButtonHandlers() {
                 
                 // Start the agent with selected languages
                 const greeting = "";
-                const prompt = `Repeat back in ${simpleLanguage}. Do not respond to anything else, just translate and repeat.`;
+                const prompt = `Input will be in ${inputLanguage}. Echo the input as ${simpleLanguage}. Do not respond to anything else.`;
                 const agentName = uid + "-" + channel + "-agent";
                 const finalAgentUid = agentUid + "-" + inputLanguage + "-" + outputLanguage;
                 
